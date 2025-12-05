@@ -11,6 +11,7 @@ class AgroBusinessRevolution {
         console.log(`🚀 Starting in ${this.environment} environment`);
         console.log(`🌐 API Base: ${this.config.baseUrl}`);
         
+        
         // Enhanced translation dictionary
         this.texts = {
             en: {
