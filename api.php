@@ -2,39 +2,103 @@
 // AgroBusiness Malawi - Complete API Endpoints
 // Place this file at: /home/p601229/public_html/agrobusinessmw/api.php
 
-// Enable error reporting for debugging
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+// --- CRITICAL FIX 1: ERROR CATCHING & JSON HEADERS ---
+// This ensures even a crash returns readable JSON
+http_response_code(200); // Force OK so frontend can read the error message
+register_shutdown_function(function() {
+    $error = error_get_last();
+    // Catch hard crashes (Fatal Errors)
+    if ($error && ($error['type'] === E_ERROR || $error['type'] === E_PARSE || $error['type'] === E_CORE_ERROR)) {
+        if (ob_get_length()) ob_clean(); // Clear any partial HTML output
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Fatal PHP Error: ' . $error['message'],
+            'file' => $error['file'],
+            'line' => $error['line']
+        ]);
+        exit;
+    }
+});
+
+// Disable HTML error printing (breaks JSON)
+ini_set('display_errors', 0); 
 error_reporting(E_ALL);
 
-// Set JSON header
+// Start output buffering
+ob_start();
+
+// Set JSON header & CORS
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
-// Database configuration
-$host = 'localhost';
+// --- SMART ENVIRONMENT DETECTION ---
+// Method 1: Check request header (from JavaScript)
+$requestedEnvironment = $_GET['env'] ?? $_SERVER['HTTP_X_ENVIRONMENT'] ?? 'production';
+
+// Method 2: Automatic detection by domain
+$currentDomain = $_SERVER['HTTP_HOST'] ?? '';
+$isLocal = ($currentDomain === 'localhost' || 
+           $currentDomain === '127.0.0.1' || 
+           strpos($currentDomain, '.local') !== false);
+
+if ($isLocal || $requestedEnvironment === 'local') {
+    // LOCAL DEVELOPMENT - Connect to Remote Server
+    $host = '185.43.232.18'; // Your server IP for remote MySQL
+    error_log('🌐 Environment: Local -> Remote Server');
+} else {
+    // PRODUCTION/STAGING - Connect to Localhost
+    $host = 'localhost';
+    error_log('🌐 Environment: Production');
+}
+
+
+// --- CRITICAL FIX 2: SMART HOST CONNECTION ---
+// Automatically detects if you are on Laptop (Local) or Server (CPanel)
+$is_local = ($_SERVER['SERVER_NAME'] === 'localhost' || $_SERVER['SERVER_NAME'] === '127.0.0.1');
+
 $username = 'p601229';
 $password = '2:p2WpmX[0YTs7';
 $database = 'p601229_AgroBusiness_MW';
 
+if ($is_local) {
+    // 🛑 RUNNING LOCALLY: Connect to Remote Server using IP
+    $host = '185.43.232.18';  // Replace with your actual server IP
+} else {
+    // 🟢 RUNNING ON SERVER: Connect to Localhost
+    $host = 'localhost';
+}
+
 // Connect to database
 try {
-    $mysqli = new mysqli($host, $username, $password, $database);
-    if ($mysqli->connect_error) {
-        throw new Exception('Database connection failed: ' . $mysqli->connect_error);
+    if (!class_exists('mysqli')) {
+        throw new Exception("Critical Error: MySQLi extension is not loaded in php.ini.");
     }
+
+    $mysqli = mysqli_init();
+    $mysqli->options(MYSQLI_OPT_CONNECT_TIMEOUT, 10); // 10s Timeout
+    
+    // Suppress warnings to handle errors manually
+    if (!@$mysqli->real_connect($host, $username, $password, $database)) {
+        throw new Exception("Connect Failed: " . mysqli_connect_error());
+    }
+
     $mysqli->set_charset('utf8mb4');
     
     // Log successful connection
     error_log('✅ Database connected successfully');
     
 } catch (Exception $e) {
-    http_response_code(500);
+    ob_clean();
+    // Return 200 OK with error details so the App can display it
+    http_response_code(200);
     echo json_encode([
         'success' => false,
-        'error' => 'Database connection failed: ' . $e->getMessage(),
+        'error' => $e->getMessage(),
+        'hint' => $is_local ? "Is your IP whitelisted in CPanel > Remote MySQL?" : "Check database credentials.",
+        'environment' => $is_local ? 'Local -> Remote' : 'Production',
         'timestamp' => date('c')
     ]);
     exit;
@@ -54,6 +118,7 @@ try {
                     'success' => true,
                     'message' => 'Database connection successful',
                     'districts_count' => $row['count'],
+                    'environment' => $is_local ? 'Local -> Remote' : 'Production',
                     'timestamp' => date('c')
                 ]);
             } else {
@@ -409,8 +474,11 @@ try {
     
 } catch (Exception $e) {
     error_log('❌ API Error: ' . $e->getMessage());
+    ob_clean();
     
-    http_response_code(500);
+    // --- CRITICAL FIX 3: RETURN 200 ON ERROR ---
+    // Return 200 instead of 500 so the frontend can display the message
+    http_response_code(200);
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage(),
@@ -420,5 +488,10 @@ try {
 }
 
 // Close database connection
-$mysqli->close();
+if (isset($mysqli)) {
+    $mysqli->close();
+}
+
+
+
 ?>

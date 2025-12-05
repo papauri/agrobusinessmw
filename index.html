@@ -672,7 +672,29 @@
         </div>
     </div>
 
+    <!-- Environment Switcher (for development only) -->
+<div id="env-switcher" style="position: fixed; bottom: 10px; right: 10px; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 9999; display: none;">
+    <strong>Environment:</strong>
+    <select id="env-select" onchange="switchEnvironment(this.value)">
+        <option value="local">Local Development</option>
+        <option value="production">Production</option>
+    </select>
+</div>
+
+<script>
+// Show switcher only in local/dev
+if (window.location.hostname === 'localhost' || window.location.hostname.includes('.local')) {
+    document.getElementById('env-switcher').style.display = 'block';
+}
+
+function switchEnvironment(env) {
+    localStorage.setItem('agrobusiness_environment', env);
+    alert(`Environment switched to ${env}. Refresh page to apply changes.`);
+}
+</script>
+
     <script src="assets/js/app.js" defer></script>
+    <script src="assets/js/config.js"></script>
     
     <!-- Performance Monitoring -->
     <script>

@@ -10,7 +10,7 @@ ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/webapp_errors.log');
 
 // Database credentials (from your USSD config)
-$host     = 'localhost';
+$host     = '127.0.0.1';
 $user     = 'p601229';
 $pass     = '2:p2WpmX[0YTs7';
 $db       = 'p601229_AgroBusiness_MW';

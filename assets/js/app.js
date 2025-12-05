@@ -1,11 +1,15 @@
 // AgroBusiness Malawi - Revolutionary Final Version (COMPLETE)
 class AgroBusinessRevolution {
-    constructor() {
-        this.currentLang = 'en';
-        this.currentScreen = 'language-selection';
-        this.selectedDistrict = null;
-        this.selectedCrop = null;
-        this.isLanguageSelected = false;
+        constructor() {
+        // Load configuration
+        this.config = window.AppConfig?.getApiConfig() || { 
+            baseUrl: '/api.php',
+            environment: 'production'
+        };
+        this.environment = this.config.environment;
+        
+        console.log(`🚀 Starting in ${this.environment} environment`);
+        console.log(`🌐 API Base: ${this.config.baseUrl}`);
         
         // Enhanced translation dictionary
         this.texts = {
@@ -1415,53 +1419,83 @@ closeModal(modal) {
     }
 }
 
-    // Test database connection
+    // Test database connection with environment info
     async testConnection() {
         try {
-            console.log('🔄 Testing database connection...');
+            console.log('🔄 Testing connection in', this.environment, 'environment...');
             const response = await this.apiCall('api.php?action=test');
+            
             if (response.success) {
                 console.log('✅ Database connection successful:', response);
-                this.showNotification('Connected to database successfully!', 'success');
+                this.showNotification(`Connected to ${this.environment} database!`, 'success');
             } else {
                 console.error('❌ Database connection failed:', response);
-                this.showNotification('Database connection failed', 'error');
+                this.showNotification(`${this.environment} database connection failed`, 'error');
             }
         } catch (error) {
             console.error('❌ Connection test error:', error);
+            // Show environment-specific help
+            if (this.environment === 'local') {
+                console.warn('💡 Local Development Tip: Ensure your IP is whitelisted in cPanel Remote MySQL');
+            }
         }
     }
 
 
-    // Enhanced API Communication
+    // Enhanced Smart API Communication
     async apiCall(endpoint, params = {}) {
         try {
             let url;
+            
+            // Add environment parameter
+            params.env = this.environment;
+            
+            // 1. External APIs (like Open-Meteo)
             if (endpoint.startsWith('http')) {
                 url = new URL(endpoint);
-            } else {
-                if (!endpoint.startsWith('agrobusinessmw/')) {
-                    endpoint = `agrobusinessmw/${endpoint}`;
+            } 
+            // 2. Use config baseUrl for our API
+            else if (this.config.baseUrl) {
+                const base = this.config.baseUrl;
+                // If it's a full URL
+                if (base.includes('http')) {
+                    url = new URL(endpoint, base);
+                } else {
+                    // Relative path
+                    url = new URL(endpoint, window.location.origin);
+                    if (!endpoint.startsWith('/')) {
+                        url = new URL(base + (base.endsWith('/') ? '' : '/') + endpoint, window.location.origin);
+                    }
                 }
+            } 
+            // 3. Fallback to relative path
+            else {
                 url = new URL(endpoint, window.location.origin);
             }
             
+            // Add parameters
             Object.entries(params).forEach(([key, value]) => {
                 if (value != null) url.searchParams.append(key, value);
             });
             
-            console.log('🔄 API Call:', url.toString());
+            console.log(`🌐 ${this.environment.toUpperCase()} API Call:`, url.toString());
             
             const response = await fetch(url);
+            
             if (!response.ok) {
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") === -1) {
+                    throw new Error(`Server returned HTML (${response.status})`);
+                }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
-            console.log('✅ API Response:', data);
+            console.log(`✅ ${this.environment.toUpperCase()} API Response:`, data);
             return data;
+            
         } catch (error) {
-            console.error('❌ API Error:', error);
+            console.error(`❌ ${this.environment.toUpperCase()} API Error:`, error);
             throw error;
         }
     }
