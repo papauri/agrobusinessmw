@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en" data-user-lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, shrink-to-fit=no">
+    <title>AgroBusiness Malawi - Smart Agricultural Revolution</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="AgroBusiness Malawi - Complete agricultural platform with live weather, crop prices, market insights for Malawian farmers. 28 districts coverage.">
+    <meta name="keywords" content="agriculture malawi, farming, crop prices, weather forecast, market insights, pest control, farming tips">
+    <meta name="author" content="AgroBusiness Malawi">
+    
+    <!-- PWA & Mobile -->
+    <meta name="theme-color" content="#16a34a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="AgroBusiness">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/icons/favicon-16x16.png">
+    <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
+    
+    <!-- Preload Critical Resources -->
+    <link rel="preload" href="assets/css/style.css" as="style">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://api.open-meteo.com">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+    
+    <!-- Open Graph for Social Sharing -->
+    <meta property="og:title" content="AgroBusiness Malawi - Smart Agricultural Revolution">
+    <meta property="og:description" content="Complete agricultural platform for Malawian farmers with live data and insights">
+    <meta property="og:image" content="/assets/images/og-image.jpg">
+    <meta property="og:url" content="https://agrobusiness-malawi.com">
+    <meta property="og:type" content="website">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="assets/css/style.css">
+    
+    
+    <!-- Inline Critical CSS for Loading Screen -->
+    <style>
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 6px;
+            background: #000;
+            color: white;
+            padding: 8px;
+            z-index: 10000;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .skip-link:focus {
+            top: 6px;
+        }
+        .skeleton-loading {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+        .skeleton-card {
+            height: 120px;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 12px;
+        }
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        .loading-state {
+            text-align: center;
+            padding: 2rem;
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #16a34a;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Skip to main content for accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- Revolutionary Loading Screen -->
+    <div id="loading-screen" class="loading-screen" role="status" aria-label="Loading application">
+        <div class="loading-particles-bg"></div>
+        <div class="loading-content">
+            <div class="logo-revolution">
+                <div class="logo-orbit">
+                    <div class="orbit-ring ring-1"></div>
+                    <div class="orbit-ring ring-2"></div>
+                    <div class="orbit-ring ring-3"></div>
+                    <div class="orbit-dot dot-1"></div>
+                    <div class="orbit-dot dot-2"></div>
+                    <div class="orbit-dot dot-3"></div>
+                </div>
+                <span class="logo-icon">🌾</span>
+                <div class="logo-glow"></div>
+            </div>
+            <div class="loading-text-revolution">
+                <h1 class="loading-title">AgroBusiness</h1>
+                <p class="loading-subtitle">Agricultural Revolution</p>
+                <div class="loading-progress-modern">
+                    <div class="progress-fill"></div>
+                    <div class="progress-text">Initializing...</div>
+                </div>
+            </div>
+        </div>
+        <div class="loading-stats">
+            <div class="stat-item">
+                <span class="stat-value" id="loading-districts">0</span>
+                <span class="stat-label">Districts</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="loading-crops">0</span>
+                <span class="stat-label">Crops</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">24/7</span>
+                <span class="stat-label">Available</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Noscript Fallback -->
+    <noscript>
+        <div style="text-align: center; padding: 2rem; background: #f8f9fa; color: #333;">
+            <h2>JavaScript Required</h2>
+            <p>AgroBusiness Malawi requires JavaScript to function properly. Please enable JavaScript in your browser to continue.</p>
+            <p>For assistance, contact our support team.</p>
+        </div>
+    </noscript>
+
+    <!-- Revolutionary Language Selection -->
+    <div id="language-selection" class="screen active" role="main" aria-label="Language selection">
+        <div class="lang-bg-revolution">
+            <div class="bg-gradient-orb orb-1"></div>
+            <div class="bg-gradient-orb orb-2"></div>
+            <div class="bg-gradient-orb orb-3"></div>
+        </div>
+        
+        <div class="container">
+            <div class="lang-welcome-revolution">
+                <div class="welcome-logo-container">
+                    <div class="logo-3d">🌾</div>
+                    <div class="logo-reflection"></div>
+                </div>
+                
+                <div class="welcome-text-revolution">
+                    <h1 class="welcome-title-3d" data-text="welcome">Welcome to AgroBusiness</h1>
+                    <p class="welcome-subtitle-modern" data-text="subtitle">Your complete agricultural platform for:</p>
+                </div>
+
+                <div class="platform-highlights">
+                    <div class="highlight-modern">
+                        <div class="highlight-icon">🌍</div>
+                        <span>All 28 Districts</span>
+                    </div>
+                    <div class="highlight-modern">
+                        <div class="highlight-icon">🌾</div>
+                        <span>12+ Crop Types</span>
+                    </div>
+                    <div class="highlight-modern">
+                        <div class="highlight-icon">🌤️</div>
+                        <span>Live Weather</span>
+                    </div>
+                    <div class="highlight-modern">
+                        <div class="highlight-icon">💰</div>
+                        <span>Market Prices</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="language-selection-revolution">
+                <h2 class="lang-prompt-modern">Choose Your Language</h2>
+                <div class="language-cards-revolution">
+                    <div class="language-card-modern" data-lang="en" lang="en" role="button" tabindex="0" aria-label="Select English language">
+                        <div class="card-bg-effect"></div>
+                        <div class="language-details">
+                            <h3>English</h3>
+                            <p>International Language</p>
+                            <span class="selection-hint">Tap to Continue</span>
+                        </div>
+                        <div class="card-arrow">→</div>
+                        <div class="card-ripple"></div>
+                    </div>
+
+                    <div class="language-card-modern" data-lang="ci" lang="ny" role="button" tabindex="0" aria-label="Select Chichewa language">
+                        <div class="card-bg-effect"></div>
+                        <div class="language-details">
+                            <h3>Chichewa</h3>
+                            <p>Chinenero cha Malawi</p>
+                            <span class="selection-hint">Dinani kuti mupitirire</span>
+                        </div>
+                        <div class="card-arrow">→</div>
+                        <div class="card-ripple"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revolutionary Main Dashboard -->
+    <div id="dashboard" class="screen">
+        <!-- Smart Header with Language Hidden Initially -->
+        <header class="header-revolution" role="banner" aria-label="Main navigation">
+            <div class="header-bg-blur"></div>
+            <div class="container">
+                <div class="header-content-modern">
+                    <div class="brand-revolution">
+                        <div class="brand-logo-container">
+                            <span class="brand-icon">🌾</span>
+                            <div class="brand-pulse"></div>
+                        </div>
+                        <div class="brand-text">
+                            <span class="brand-name">AgroBusiness</span>
+                            <span class="brand-location">Malawi</span>
+                        </div>
+                    </div>
+
+                    <div class="header-controls">
+                        <!-- Smart Language Switcher (Hidden initially, shows on click) -->
+                        <div class="lang-switcher-smart" id="lang-switcher">
+                            <button class="lang-current" id="current-lang-btn" aria-label="Change language" aria-expanded="false" aria-haspopup="true">
+                                <span class="lang-flag" id="current-flag">🇬🇧</span>
+                                <span class="lang-code">EN</span>
+                                <span class="lang-expand">⌄</span>
+                            </button>
+                            <div class="lang-dropdown-smart" id="lang-dropdown" role="menu" aria-label="Language options">
+                                <div class="lang-option-smart" data-lang="en" role="menuitem" tabindex="0" lang="en">
+                                    <span class="option-flag">🇬🇧</span>
+                                    <span class="option-name">English</span>
+                                </div>
+                                <div class="lang-option-smart" data-lang="ci" role="menuitem" tabindex="0" lang="ny">
+                                    <span class="option-flag">🇲🇼</span>
+                                    <span class="option-name">Chichewa</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-revolution" id="main-content" role="main">
+            <div class="container">
+                <!-- Hero Section with Live Stats -->
+                <section class="hero-revolution">
+                    <div class="hero-content">
+                        <div class="hero-text">
+                            <h1 class="hero-title-3d" data-text="welcome">Welcome to AgroBusiness</h1>
+                            <p class="hero-subtitle-modern" data-text="subtitle">Your complete agricultural platform</p>
+                        </div>
+                        
+                        <div class="hero-action">
+                            <button class="cta-button-revolution" id="explore-btn" aria-label="Explore agricultural services">
+                                <span class="cta-text">Explore Services</span>
+                                <span class="cta-icon">✨</span>
+                                <div class="cta-wave"></div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Stats Dashboard -->
+                    <div class="stats-dashboard-modern">
+                        <div class="stat-card-modern" data-action="view-districts" role="button" tabindex="0" aria-label="View all districts">
+                            <div class="stat-bg-gradient"></div>
+                            <div class="stat-icon">📍</div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="districts-count-hero">28</div>
+                                <div class="stat-label">Districts Covered</div>
+                                <div class="stat-action">View All Districts</div>
+                            </div>
+                            <div class="stat-arrow">→</div>
+                        </div>
+
+                        <div class="stat-card-modern" data-action="view-crops" role="button" tabindex="0" aria-label="View all crops">
+                            <div class="stat-bg-gradient"></div>
+                            <div class="stat-icon">🌾</div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="crops-count-hero">12</div>
+                                <div class="stat-label">Crop Types</div>
+                                <div class="stat-action">View All Crops</div>
+                            </div>
+                            <div class="stat-arrow">→</div>
+                        </div>
+
+                        <div class="stat-card-modern" data-action="weather-overview" role="button" tabindex="0" aria-label="Check weather data">
+                            <div class="stat-bg-gradient"></div>
+                            <div class="stat-icon">🌤️</div>
+                            <div class="stat-content">
+                                <div class="stat-number">Live</div>
+                                <div class="stat-label">Weather Data</div>
+                                <div class="stat-action">Check Weather</div>
+                            </div>
+                            <div class="stat-arrow">→</div>
+                        </div>
+
+                        <div class="stat-card-modern" data-action="market-overview" role="button" tabindex="0" aria-label="View market updates">
+                            <div class="stat-bg-gradient"></div>
+                            <div class="stat-icon">💰</div>
+                            <div class="stat-content">
+                                <div class="stat-number">24/7</div>
+                                <div class="stat-label">Market Updates</div>
+                                <div class="stat-action">View Prices</div>
+                            </div>
+                            <div class="stat-arrow">→</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Revolutionary Services Grid -->
+                <section class="services-revolution" aria-labelledby="services-heading">
+                    <h2 id="services-heading" class="section-title-modern">Agricultural Services</h2>
+                    
+                    <div class="services-grid-revolution">
+                        <!-- Featured Service -->
+                        <div class="service-card-revolution featured" data-service="crop-prices" role="button" tabindex="0" aria-label="View crop prices">
+                            <div class="card-bg-revolution featured-bg"></div>
+                            <div class="card-glow-revolution"></div>
+                            <div class="service-icon-3d">💰</div>
+                            <div class="service-content-modern">
+                                <h3 data-text="crop_prices">Crop Prices</h3>
+                                <p data-text="crop_prices_desc">Live market prices for all crops</p>
+                                <div class="service-tags">
+                                    <span class="tag">Live Updates</span>
+                                    <span class="tag">All Districts</span>
+                                </div>
+                            </div>
+                            <div class="service-arrow-modern">
+                                <span class="material-symbols-rounded">trending_up</span>
+                            </div>
+                        </div>
+
+                        <!-- Weather Service -->
+                        <div class="service-card-revolution" data-service="weather" role="button" tabindex="0" aria-label="Check weather forecast">
+                            <div class="card-bg-revolution"></div>
+                            <div class="service-icon-3d">🌤️</div>
+                            <div class="service-content-modern">
+                                <h3 data-text="weather">Weather Forecast</h3>
+                                <p data-text="weather_desc">7-day weather predictions</p>
+                                <div class="service-tags">
+                                    <span class="tag">Free API</span>
+                                    <span class="tag">Farming Tips</span>
+                                </div>
+                            </div>
+                            <div class="service-arrow-modern">
+                                <span class="material-symbols-rounded">wb_sunny</span>
+                            </div>
+                        </div>
+
+                        <!-- Market Insights -->
+                        <div class="service-card-revolution" data-service="market-insights" role="button" tabindex="0" aria-label="View market insights">
+                            <div class="card-bg-revolution"></div>
+                            <div class="service-icon-3d">📊</div>
+                            <div class="service-content-modern">
+                                <h3 data-text="market_insights">Market Insights</h3>
+                                <p data-text="market_insights_desc">District market intelligence</p>
+                                <div class="service-tags">
+                                    <span class="tag">Analytics</span>
+                                    <span class="tag">Trends</span>
+                                </div>
+                            </div>
+                            <div class="service-arrow-modern">
+                                <span class="material-symbols-rounded">analytics</span>
+                            </div>
+                        </div>
+
+                        <!-- Find Sellers -->
+                        <div class="service-card-revolution" data-service="sellers" role="button" tabindex="0" aria-label="Find agricultural sellers">
+                            <div class="card-bg-revolution"></div>
+                            <div class="service-icon-3d">👨‍🌾</div>
+                            <div class="service-content-modern">
+                                <h3 data-text="find_sellers">Find Sellers</h3>
+                                <p data-text="find_sellers_desc">Connect with suppliers</p>
+                                <div class="service-tags">
+                                    <span class="tag">Verified</span>
+                                    <span class="tag">Contact Info</span>
+                                </div>
+                            </div>
+                            <div class="service-arrow-modern">
+                                <span class="material-symbols-rounded">handshake</span>
+                            </div>
+                        </div>
+
+                        <!-- Find Buyers -->
+                        <div class="service-card-revolution" data-service="buyers" role="button" tabindex="0" aria-label="Find crop buyers">
+                            <div class="card-bg-revolution"></div>
+                            <div class="service-icon-3d">🏢</div>
+                            <div class="service-content-modern">
+                                <h3 data-text="find_buyers">Find Buyers</h3>
+                                <p data-text="find_buyers_desc">Find markets for your produce</p>
+                                <div class="service-tags">
+                                    <span class="tag">Bulk Orders</span>
+                                    <span class="tag">Fair Prices</span>
+                                </div>
+                            </div>
+                            <div class="service-arrow-modern">
+                                <span class="material-symbols-rounded">storefront</span>
+                            </div>
+                        </div>
+
+                        <!-- Pest Control -->
+                        <div class="service-card-revolution" data-service="pest-control" role="button" tabindex="0" aria-label="Get pest control information">
+                            <div class="card-bg-revolution"></div>
+                            <div class="service-icon-3d">🐛</div>
+                            <div class="service-content-modern">
+                                <h3 data-text="pest_control">Pest Control</h3>
+                                <p data-text="pest_control_desc">Combat pests effectively</p>
+                                <div class="service-tags">
+                                    <span class="tag">Prevention</span>
+                                    <span class="tag">Solutions</span>
+                                </div>
+                            </div>
+                            <div class="service-arrow-modern">
+                                <span class="material-symbols-rounded">bug_report</span>
+                            </div>
+                        </div>
+
+                        <!-- Farming Tips -->
+                        <div class="service-card-revolution" data-service="farming-tips" role="button" tabindex="0" aria-label="Get farming tips">
+                            <div class="card-bg-revolution"></div>
+                            <div class="service-icon-3d">🌾</div>
+                            <div class="service-content-modern">
+                                <h3 data-text="farming_tips">Farming Tips</h3>
+                                <p data-text="farming_tips_desc">Expert farming practices</p>
+                                <div class="service-tags">
+                                    <span class="tag">Expert Tips</span>
+                                    <span class="tag">Best Practices</span>
+                                </div>
+                            </div>
+                            <div class="service-arrow-modern">
+                                <span class="material-symbols-rounded">lightbulb</span>
+                            </div>
+                        </div>
+
+                        <!-- Basic Info -->
+                        <div class="service-card-revolution" data-service="basic-info" role="button" tabindex="0" aria-label="Get basic farming information">
+                            <div class="card-bg-revolution"></div>
+                            <div class="service-icon-3d">📚</div>
+                            <div class="service-content-modern">
+                                <h3 data-text="basic_info">Basic Information</h3>
+                                <p data-text="basic_info_desc">Essential farming knowledge</p>
+                                <div class="service-tags">
+                                    <span class="tag">Beginner Friendly</span>
+                                    <span class="tag">Comprehensive</span>
+                                </div>
+                            </div>
+                            <div class="service-arrow-modern">
+                                <span class="material-symbols-rounded">school</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Quick Access Floating Button -->
+        <div class="quick-access-fab">
+            <button class="fab-main" id="quick-access-btn" aria-label="Quick access menu" aria-expanded="false" aria-haspopup="true">
+                <span class="material-symbols-rounded">add</span>
+            </button>
+            <div class="fab-menu" id="fab-menu" role="menu" aria-label="Quick actions">
+                <button class="fab-item" data-quick="weather" role="menuitem">
+                    <span class="material-symbols-rounded">wb_sunny</span>
+                    <span class="fab-label">Quick Weather</span>
+                </button>
+                <button class="fab-item" data-quick="prices" role="menuitem">
+                    <span class="material-symbols-rounded">trending_up</span>
+                    <span class="fab-label">Price Check</span>
+                </button>
+                <button class="fab-item" data-quick="districts" role="menuitem">
+                    <span class="material-symbols-rounded">map</span>
+                    <span class="fab-label">Districts</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced Content Screen -->
+    <div id="content" class="screen">
+        <header class="header-revolution content-header" role="banner">
+            <div class="header-bg-blur"></div>
+            <div class="container">
+                <div class="header-content-modern">
+                    <button id="back-btn" class="back-btn-revolution" aria-label="Go back">
+                        <span class="material-symbols-rounded">arrow_back</span>
+                        <span>Back</span>
+                        <div class="btn-ripple"></div>
+                    </button>
+                    
+                    <h1 id="content-title" class="content-title-revolution">Service</h1>
+                    
+                    <button class="share-btn" id="share-btn" aria-label="Share content">
+                        <span class="material-symbols-rounded">share</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-revolution" role="main">
+            <div class="container">
+                <div id="content-area" class="content-area-revolution" aria-live="polite">
+                    <!-- Dynamic content goes here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Revolutionary District Selection Modal -->
+    <div id="district-modal" class="modal-revolution" role="dialog" aria-modal="true" aria-labelledby="district-modal-title">
+        <div class="modal-backdrop-revolution"></div>
+        <div class="modal-content-revolution district-modal">
+            <div class="modal-header-revolution">
+                <div class="modal-title-container">
+                    <div class="title-icon">🗺️</div>
+                    <div class="title-text">
+                        <h2 id="district-modal-title" data-text="select_district">Select Your District</h2>
+                        <p>Choose from 28 districts across Malawi</p>
+                    </div>
+                </div>
+                <button class="modal-close-revolution" aria-label="Close district selection">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            
+            <div class="modal-body-revolution">
+                <!-- Smart Search -->
+                <div class="search-container-revolution">
+                    <div class="search-box-revolution">
+                        <span class="search-icon material-symbols-rounded">search</span>
+                        <input type="text" id="district-search" placeholder="Search districts..." aria-label="Search districts">
+                        <div class="search-animation"></div>
+                    </div>
+                    <div class="search-stats" id="search-stats" aria-live="polite">28 districts available</div>
+                </div>
+
+                <!-- Revolutionary District Grid with Loading State -->
+                <div id="district-list" class="district-grid-revolution" aria-busy="false" aria-live="polite">
+                    <div class="loading-state" style="display: none;">
+                        <div class="loading-spinner"></div>
+                        <p>Loading districts...</p>
+                    </div>
+                    <div class="skeleton-loading">
+                        <!-- Skeleton cards while loading -->
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                    </div>
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revolutionary Crop Selection Modal -->
+    <div id="crop-modal" class="modal-revolution" role="dialog" aria-modal="true" aria-labelledby="crop-modal-title">
+        <div class="modal-backdrop-revolution"></div>
+        <div class="modal-content-revolution crop-modal">
+            <div class="modal-header-revolution">
+                <div class="modal-title-container">
+                    <div class="title-icon">🌾</div>
+                    <div class="title-text">
+                        <h2 id="crop-modal-title" data-text="select_crop">Select Your Crop</h2>
+                        <p>Choose from our comprehensive crop database</p>
+                    </div>
+                </div>
+                <button class="modal-close-revolution" aria-label="Close crop selection">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            
+            <div class="modal-body-revolution">
+                <!-- Smart Search -->
+                <div class="search-container-revolution">
+                    <div class="search-box-revolution">
+                        <span class="search-icon material-symbols-rounded">search</span>
+                        <input type="text" id="crop-search" placeholder="Search crops..." aria-label="Search crops">
+                        <div class="search-animation"></div>
+                    </div>
+                    <div class="search-stats" id="crop-search-stats" aria-live="polite">Loading crops...</div>
+                </div>
+
+                <!-- Revolutionary Crop Grid with Loading State -->
+                <div id="crop-list" class="crop-grid-revolution" aria-busy="false" aria-live="polite">
+                    <div class="loading-state" style="display: none;">
+                        <div class="loading-spinner"></div>
+                        <p>Loading crops...</p>
+                    </div>
+                    <div class="skeleton-loading">
+                        <!-- Skeleton cards while loading -->
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                    </div>
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Districts Overview Modal -->
+    <div id="districts-overview-modal" class="modal-revolution" role="dialog" aria-modal="true" aria-labelledby="districts-overview-title">
+        <div class="modal-backdrop-revolution"></div>
+        <div class="modal-content-revolution overview-modal">
+            <div class="modal-header-revolution">
+                <div class="modal-title-container">
+                    <div class="title-icon">🗺️</div>
+                    <div class="title-text">
+                        <h2 id="districts-overview-title">All Districts</h2>
+                        <p>Complete coverage across Malawi</p>
+                    </div>
+                </div>
+                <button class="modal-close-revolution" aria-label="Close districts overview">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            
+            <div class="modal-body-revolution">
+                <div id="districts-overview-content" class="overview-grid" aria-live="polite">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Crops Overview Modal -->
+    <div id="crops-overview-modal" class="modal-revolution" role="dialog" aria-modal="true" aria-labelledby="crops-overview-title">
+        <div class="modal-backdrop-revolution"></div>
+        <div class="modal-content-revolution overview-modal">
+            <div class="modal-header-revolution">
+                <div class="modal-title-container">
+                    <div class="title-icon">🌾</div>
+                    <div class="title-text">
+                        <h2 id="crops-overview-title">All Crops</h2>
+                        <p>Comprehensive agricultural database</p>
+                    </div>
+                </div>
+                <button class="modal-close-revolution" aria-label="Close crops overview">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+            
+            <div class="modal-body-revolution">
+                <div id="crops-overview-content" class="overview-grid" aria-live="polite">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/app.js" defer></script>
+    
+    <!-- Performance Monitoring -->
+    <script>
+        window.addEventListener('load', function() {
+            // Performance monitoring
+            if ('performance' in window) {
+                const loadTime = performance.timing.loadEventEnd - performance.timing.navigationStart;
+                console.log('Page load time:', loadTime + 'ms');
+                
+                // Send to analytics (optional)
+                if (navigator.sendBeacon && loadTime > 0) {
+                    navigator.sendBeacon('/api/analytics', JSON.stringify({ 
+                        loadTime: loadTime,
+                        userAgent: navigator.userAgent,
+                        timestamp: new Date().toISOString()
+                    }));
+                }
+            }
+            
+            // Service Worker Registration for PWA
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => console.log('SW registered: ', registration))
+                    .catch(registrationError => console.log('SW registration failed: ', registrationError));
+            }
+        });
+    </script>
+    
+    <!-- Structured Data for SEO -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "AgroBusiness Malawi",
+        "description": "Smart agricultural platform for Malawian farmers with live weather, crop prices, and market insights",
+        "url": "https://promanaged-it.com/agrobusinessmw/.com",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Any",
+        "permissions": "geolocation",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "author": {
+            "@type": "Organization",
+            "name": "AgroBusiness Malawi"
+        },
+        "datePublished": "2024-01-01"
+    }
+    </script>
+</body>
+</html>

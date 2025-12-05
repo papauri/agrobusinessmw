@@ -1,0 +1,8 @@
+[02-Oct-2025 16:39:18 Europe/Dublin] POST Data: []
+[02-Oct-2025 16:39:18 Europe/Dublin] Database connection successful on attempt 1
+[02-Oct-2025 16:41:10 Europe/Dublin] POST Data: []
+[02-Oct-2025 16:41:10 Europe/Dublin] Database connection successful on attempt 1
+[02-Oct-2025 16:41:10 Europe/Dublin] PHP Fatal error:  Uncaught Error: Call to undefined function success_response() in /home/p601229/public_html/agrobusinessmw/api/districts.php:22
+Stack trace:
+#0 {main}
+  thrown in /home/p601229/public_html/agrobusinessmw/api/districts.php on line 22
