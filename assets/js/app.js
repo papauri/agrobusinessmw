@@ -175,6 +175,9 @@ class AgroBusinessRevolution {
         // Bind all events
         this.bindAllEvents();
 
+        // Multi-page boot: restore language + jump straight into this page's service.
+        this._bootPage();
+
         // Hide loading screen now that data is ready — give the progress animation
         // a brief moment to finish rendering before fading out (200ms is enough).
         setTimeout(() => this.hideLoadingScreen(), 200);
@@ -833,10 +836,59 @@ class AgroBusinessRevolution {
             backBtn.style.transform = 'scale(0.9)';
             setTimeout(() => { backBtn.style.transform = ''; }, 150);
         }
-        // Always use browser history — each view has its own state entry now.
+        // On a standalone function page there is no in-page dashboard — go home.
+        if (this._isPageMode) {
+            if (document.referrer && new URL(document.referrer, location.href).pathname.endsWith('index.php')) {
+                history.back();
+            } else {
+                window.location.href = 'index.php';
+            }
+            return;
+        }
+        // Home page: each content view has its own history entry.
         if (history.length > 1) {
             history.back();
         } else {
+            this.showScreen('dashboard');
+        }
+    }
+
+    // ── Multi-page boot ──────────────────────────────────────────────────
+    // Each page sets window.AGRO_PAGE (via partials/scripts.php). Function pages
+    // jump straight into their service; the home page shows the dashboard once a
+    // language has been chosen. Language + last district/crop are restored so the
+    // experience is continuous as the user moves between separate pages.
+    _bootPage() {
+        const page = window.AGRO_PAGE || null;
+
+        const savedLang = localStorage.getItem('preferredLanguage');
+        if (savedLang && this.texts[savedLang]) {
+            this.currentLang = savedLang;
+            this.updateLanguageFlags();
+            this.updateTexts();
+        }
+
+        const d = parseInt(localStorage.getItem('agro_selected_district'), 10);
+        if (d) this.selectedDistrict = d;
+        const c = parseInt(localStorage.getItem('agro_selected_crop'), 10);
+        if (c) this.selectedCrop = c;
+
+        const setTitle = (txt) => { const t = document.getElementById('content-title'); if (t) t.textContent = txt; };
+        if (page === 'register') {
+            this._isPageMode = true;
+            this.showScreen('content');
+            setTitle(this.currentLang === 'ci' ? 'Lembetsani' : 'Register');
+            this.openRegistrationModal();
+        } else if (page === 'status') {
+            this._isPageMode = true;
+            this.showScreen('content');
+            setTitle(this.currentLang === 'ci' ? 'Onani Mkhalidwe' : 'Check Status');
+            const m = document.getElementById('status-modal');
+            if (m) this.openModal(m);
+        } else if (page) {
+            this._isPageMode = true;
+            this.openService(page);
+        } else if (localStorage.getItem('hasSelectedLanguage') === 'true') {
             this.showScreen('dashboard');
         }
     }
@@ -1001,6 +1053,11 @@ class AgroBusinessRevolution {
     }
 
     showScreen(screenId) {
+        // On a standalone function page there is no in-page dashboard — "go home" means index.php.
+        if (screenId === 'dashboard' && this._isPageMode && !document.getElementById('dashboard')) {
+            window.location.href = 'index.php';
+            return;
+        }
         // Reset history to dashboard when going home; each content view pushes its own state via pushNavState().
         if (screenId === 'dashboard') {
             history.replaceState({ screen: 'dashboard' }, '', location.pathname);
@@ -1744,6 +1801,7 @@ class AgroBusinessRevolution {
         // Uses the same shared picker as the overview modal — one uniform design.
         this._renderDistrictPicker(body, (id) => {
             this.selectedDistrict = id === 'all' ? null : id;
+            if (this.selectedDistrict) localStorage.setItem('agro_selected_district', this.selectedDistrict);
             districtSelected = true;
             this.closeModal(modal);
             if (callback) callback();
@@ -1802,6 +1860,7 @@ class AgroBusinessRevolution {
             list.querySelectorAll('.crop-item').forEach(item => {
                 item.addEventListener('click', () => {
                     this.selectedCrop = item.dataset.id;
+                    if (this.selectedCrop) localStorage.setItem('agro_selected_crop', this.selectedCrop);
                     cropSelected = true;
 
                     item.style.background = 'var(--accent)';

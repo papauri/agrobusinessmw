@@ -25,12 +25,39 @@ if (file_exists($envFile)) {
     }
 }
 
+// ─── DB CONNECTION ────────────────────────────────────────────────────────────
+$host    = $_ENV['DB_HOST'] ?? '';
+$db      = @new mysqli($host, $_ENV['DB_USER'] ?? '', $_ENV['DB_PASS'] ?? '', $_ENV['DB_NAME'] ?? '', (int)($_ENV['DB_PORT'] ?? 3306));
+if ($db->connect_error) die('<p style="color:red">DB connection failed.</p>');
+$db->set_charset('utf8mb4');
+
 // ─── ADMIN AUTH ───────────────────────────────────────────────────────────────
-$adminPassword = $_ENV['ADMIN_PASSWORD'] ?? 'agro_admin_2024';
-$adminUser     = $_ENV['ADMIN_USER']     ?? 'admin';
+// Credentials live in the `admin_users` table (created/seeded from .env on
+// first run by api.php's admin_get_user()) — never hardcoded here.
+$db->query(
+    "CREATE TABLE IF NOT EXISTS admin_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        admin_token VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )"
+);
+$adminRow = ($res = $db->query("SELECT username, password_hash FROM admin_users LIMIT 1")) ? $res->fetch_assoc() : null;
+if (!$adminRow) {
+    $seedUser  = $_ENV['ADMIN_USER'] ?? 'admin';
+    $seedPass  = $_ENV['ADMIN_PASSWORD'] ?? bin2hex(random_bytes(8));
+    $seedToken = $_ENV['ADMIN_TOKEN'] ?? bin2hex(random_bytes(16));
+    $hash = password_hash($seedPass, PASSWORD_DEFAULT);
+    $stmt = $db->prepare("INSERT INTO admin_users (username, password_hash, admin_token) VALUES (?, ?, ?)");
+    $stmt->bind_param('sss', $seedUser, $hash, $seedToken);
+    $stmt->execute();
+    $adminRow = ['username' => $seedUser, 'password_hash' => $hash];
+}
 
 if (!isset($_SESSION['admin_logged_in'])) {
-    if (isset($_POST['password']) && $_POST['username'] === $adminUser && $_POST['password'] === $adminPassword) {
+    if (isset($_POST['password']) && $_POST['username'] === $adminRow['username'] && password_verify($_POST['password'], $adminRow['password_hash'])) {
         $_SESSION['admin_logged_in'] = true;
     } else {
         if (isset($_POST['password'])) {
@@ -40,12 +67,6 @@ if (!isset($_SESSION['admin_logged_in'])) {
         exit;
     }
 }
-
-// ─── DB CONNECTION ────────────────────────────────────────────────────────────
-$host    = $_ENV['DB_HOST'] ?? '';
-$db      = @new mysqli($host, $_ENV['DB_USER'] ?? '', $_ENV['DB_PASS'] ?? '', $_ENV['DB_NAME'] ?? '', (int)($_ENV['DB_PORT'] ?? 3306));
-if ($db->connect_error) die('<p style="color:red">DB connection failed.</p>');
-$db->set_charset('utf8mb4');
 
 // Reference-price override store (district_id 0 = all districts). Created lazily.
 $db->query("CREATE TABLE IF NOT EXISTS price_overrides (
@@ -254,13 +275,16 @@ if (isset($_GET['logout'])) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin — AgroBusiness Malawi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Inter, system-ui, sans-serif; background: #f5f2eb; color: #3e3930; min-height: 100vh; }
+body { font-family: 'DM Sans', system-ui, sans-serif; background: #f5f2eb; color: #3e3930; min-height: 100vh; }
 a { color: #8B7355; text-decoration: none; transition: color 0.18s ease; }
 a:hover { color: #7a6448; }
 .top-bar { background: #fff; border-bottom: 1px solid #e8e2d9; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(70,60,50,0.06); }
-.top-bar h1 { font-size: 1.1rem; font-weight: 700; color: #3e3930; }
+.top-bar h1 { font-family: 'DM Serif Display', Georgia, serif; font-size: 1.25rem; font-weight: 400; color: #3e3930; }
 .top-bar small { color: #6b5f52; }
 .logout { padding: .5rem 1.2rem; background: transparent; border: 1.5px solid #d5cfc4; border-radius: 6px; color: #6b5f52; font-size: .85rem; font-weight: 600; cursor: pointer; transition: all 0.18s ease; }
 .logout:hover { background: #b94040; border-color: #b94040; color: #fff; }
@@ -649,11 +673,14 @@ function showLogin(?string $error): void {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin Login — AgroBusiness</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Inter, system-ui, sans-serif; background: #f5f2eb; color: #3e3930; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+body { font-family: 'DM Sans', system-ui, sans-serif; background: #f5f2eb; color: #3e3930; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .card { background: #fff; border: 1px solid #e8e2d9; border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 360px; box-shadow: 0 8px 24px rgba(70,60,50,0.12); }
-h2 { margin-bottom: 1.5rem; font-size: 1.4rem; text-align: center; color: #3e3930; font-weight: 700; }
+h2 { margin-bottom: 1.5rem; font-family: 'DM Serif Display', Georgia, serif; font-size: 1.6rem; text-align: center; color: #3e3930; font-weight: 400; }
 label { display: block; font-size: .85rem; color: #6b5f52; margin-bottom: .4rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 input { width: 100%; padding: .875rem 1rem; background: #faf8f4; border: 1.5px solid #d5cfc4; border-radius: 8px; color: #3e3930; font-size: .95rem; margin-bottom: 1.25rem; outline: none; font-family: inherit; transition: all 0.18s ease; }
 input:focus { border-color: #8B7355; background: #fff; box-shadow: 0 0 0 3px rgba(139,115,85,0.1); }

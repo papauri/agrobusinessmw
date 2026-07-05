@@ -1,0 +1,15 @@
+# AgroBusiness Malawi — serve the new multi-page PHP app first.
+DirectoryIndex index.php index.html
+
+# Friendly extensionless URLs: /prices -> prices.php, etc.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    # If the request maps to an existing file/dir, serve it as-is.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+    # Otherwise, if "<name>.php" exists, serve it.
+    RewriteCond %{REQUEST_FILENAME}\.php -f
+    RewriteRule ^(.+?)/?$ $1.php [L]
+</IfModule>
