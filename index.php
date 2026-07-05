@@ -98,14 +98,31 @@ include __DIR__ . '/partials/head.php';
 
         <main class="main-content" id="main-content" role="main">
             <div class="container">
-                <section class="stats-bar">
-                    <span class="stat">28 Districts</span>
-                    <span class="stat-divider">·</span>
-                    <span class="stat">9 Crops</span>
-                    <span class="stat-divider">·</span>
-                    <span class="stat">Live Weather</span>
-                    <span class="stat-divider">·</span>
-                    <span class="stat">24/7 Prices</span>
+                <section class="dash-hero" aria-labelledby="dash-hero-title">
+                    <div class="dash-hero-text">
+                        <p class="dash-hero-eyebrow">🌾 AgroBusiness Malawi</p>
+                        <h1 id="dash-hero-title">Smarter farming decisions, every day.</h1>
+                        <p class="dash-hero-sub">Live crop prices, weather and market intelligence for all 28 districts —
+                            in English and Chichewa, on any phone.</p>
+                        <div class="dash-hero-cta">
+                            <a class="btn-primary" href="prices.php">View Crop Prices</a>
+                            <a class="btn-secondary" href="register.php">Register Free</a>
+                        </div>
+                    </div>
+                    <div class="dash-stats" role="list" aria-label="Platform coverage">
+                        <div class="dash-stat" role="listitem">
+                            <span class="dash-stat-num">28</span><span class="dash-stat-label">Districts</span>
+                        </div>
+                        <div class="dash-stat" role="listitem">
+                            <span class="dash-stat-num">9</span><span class="dash-stat-label">Crops</span>
+                        </div>
+                        <div class="dash-stat" role="listitem">
+                            <span class="dash-stat-num">Live</span><span class="dash-stat-label">Weather</span>
+                        </div>
+                        <div class="dash-stat" role="listitem">
+                            <span class="dash-stat-num">24/7</span><span class="dash-stat-label">Prices</span>
+                        </div>
+                    </div>
                 </section>
 
                 <section class="services" aria-labelledby="services-heading">
@@ -240,7 +257,7 @@ include __DIR__ . '/partials/head.php';
                             <p data-text="basic_info_desc">Essential knowledge</p>
                         </a>
 
-                        <a class="service-card" href="register.php" aria-label="Register account">
+                        <a class="service-card service-card--accent" href="register.php" aria-label="Register account">
                             <div class="service-icon">
                                 <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                                     <rect x="10" y="6" width="28" height="36" rx="4" fill="currentColor" opacity=".15" stroke="currentColor" stroke-width="2" />
@@ -254,6 +271,27 @@ include __DIR__ . '/partials/head.php';
                     </div>
                 </section>
             </div>
+
+            <footer class="dash-footer">
+                <div class="container dash-footer-inner">
+                    <div class="dash-footer-brand">
+                        <span class="brand-icon">🌾</span>
+                        <div>
+                            <strong>AgroBusiness Malawi</strong>
+                            <span>Growing knowledge for every farmer.</span>
+                        </div>
+                    </div>
+                    <nav class="dash-footer-links" aria-label="Footer">
+                        <a href="prices.php">Prices</a>
+                        <a href="weather.php">Weather</a>
+                        <a href="sellers.php">Sellers</a>
+                        <a href="buyers.php">Buyers</a>
+                        <a href="register.php">Register</a>
+                        <a href="status.php">Check Status</a>
+                    </nav>
+                    <p class="dash-footer-copy">© <?= date('Y') ?> AgroBusiness Malawi · Available on web &amp; USSD</p>
+                </div>
+            </footer>
         </main>
     </div>
 

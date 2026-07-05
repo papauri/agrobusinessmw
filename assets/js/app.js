@@ -875,16 +875,15 @@ class AgroBusinessRevolution {
 
         const setTitle = (txt) => { const t = document.getElementById('content-title'); if (t) t.textContent = txt; };
         if (page === 'register') {
+            // Page-first: show the intro page; the modal only opens when the user
+            // clicks "Start Registration". Do NOT auto-open the modal on load.
             this._isPageMode = true;
             this.showScreen('content');
             setTitle(this.currentLang === 'ci' ? 'Lembetsani' : 'Register');
-            this.openRegistrationModal();
         } else if (page === 'status') {
             this._isPageMode = true;
             this.showScreen('content');
             setTitle(this.currentLang === 'ci' ? 'Onani Mkhalidwe' : 'Check Status');
-            const m = document.getElementById('status-modal');
-            if (m) this.openModal(m);
         } else if (page) {
             this._isPageMode = true;
             this.openService(page);
@@ -1505,6 +1504,22 @@ class AgroBusinessRevolution {
      * Renders: search + region chips + optional "All Districts" hero + Recent
      * quick-picks + monogram cards. onSelect receives a district id or 'all'.
      */
+    // Correct region for a Malawi district by NAME (the id-keyed districtCoords
+    // does not line up with DB ids, which was mislabelling regions in the picker).
+    _regionForDistrict(name) {
+        if (!this._regionMap) {
+            const N = ['Chitipa', 'Karonga', 'Rumphi', 'Nkhata Bay', 'Mzimba', 'Mzuzu', 'Likoma'];
+            const C = ['Kasungu', 'Nkhotakota', 'Ntchisi', 'Dowa', 'Salima', 'Lilongwe', 'Mchinji', 'Dedza', 'Ntcheu'];
+            const S = ['Mangochi', 'Machinga', 'Zomba', 'Chiradzulu', 'Blantyre', 'Mwanza', 'Neno', 'Thyolo', 'Mulanje', 'Phalombe', 'Chikwawa', 'Nsanje', 'Balaka'];
+            this._regionMap = {};
+            N.forEach(n => this._regionMap[n.toLowerCase()] = 'Northern');
+            C.forEach(n => this._regionMap[n.toLowerCase()] = 'Central');
+            S.forEach(n => this._regionMap[n.toLowerCase()] = 'Southern');
+        }
+        const key = String(name || '').trim().toLowerCase().replace(/\s+(rural|island)$/, '');
+        return this._regionMap[key] || 'Central';
+    }
+
     _renderDistrictPicker(bodyEl, onSelect, opts = {}) {
         return this.loadDistricts().then(districts => {
             if (!bodyEl || !districts || !districts.length) return;
@@ -1512,7 +1527,7 @@ class AgroBusinessRevolution {
             const regionClass = { Northern: 'r-north', Central: 'r-central', Southern: 'r-south', Malawi: 'r-central' };
             const list = districts.map(d => ({
                 id: Number(d.id), name: d.name,
-                region: (this.districtCoords[d.id] && this.districtCoords[d.id].region) || 'Malawi'
+                region: this._regionForDistrict(d.name)
             }));
             const byId = id => list.find(d => d.id === id);
             const recent = this._getRecentDistricts().map(byId).filter(Boolean).slice(0, 3);
@@ -3322,6 +3337,7 @@ AgroBusinessRevolution.prototype.openRegistrationModal = function () {
     const modal = document.getElementById('register-modal');
     if (!modal) return;
     this._regState = { step: 1, userType: null, selectedCrops: [] };
+    this._regNameWarned = false;
     document.querySelectorAll('.reg-option').forEach(b => b.classList.remove('selected'));
     const bizField = document.getElementById('reg-business-field');
     if (bizField) bizField.style.display = 'none';
@@ -3477,11 +3493,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 el.parentNode.appendChild(span);
             };
 
-            const name     = document.getElementById('reg-full-name').value.trim();
-            const phone    = document.getElementById('reg-phone').value.trim();
-            const email    = document.getElementById('reg-email').value.trim();
-            const district = document.getElementById('reg-district').value;
-            const village  = document.getElementById('reg-village').value.trim();
+            const name       = document.getElementById('reg-full-name').value.trim();
+            const phone      = document.getElementById('reg-phone').value.trim();
+            const email      = document.getElementById('reg-email').value.trim();
+            const nationalId = document.getElementById('reg-national-id').value.trim();
+            const district   = document.getElementById('reg-district').value;
+            const village    = document.getElementById('reg-village').value.trim();
 
             let valid = true;
             if (!name || name.length < 2) { setErr('reg-full-name', 'Full name is required (at least 2 characters).'); valid = false; }
@@ -3495,7 +3512,40 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!district) { setErr('reg-district', 'Please select your district.'); valid = false; }
 
             if (!valid) return;
-            if (window.app) window.app._regGotoStep(3);
+
+            // Real-time DB duplicate check — stop several accounts before the form is finished.
+            const errIdFor = (f) => f === 'national_id' ? 'reg-national-id' : (f === 'name' ? 'reg-full-name' : 'reg-' + f);
+            const labelFor = { phone: 'phone number', email: 'email', national_id: 'National ID' };
+            const params = new URLSearchParams({ phone, email, national_id: nationalId, full_name: name });
+            step2Next.disabled = true;
+            const origLabel = step2Next.textContent;
+            step2Next.textContent = 'Checking…';
+            fetch('api.php?action=check_duplicate&' + params.toString())
+                .then(r => r.json())
+                .then(res => {
+                    step2Next.disabled = false;
+                    step2Next.textContent = origLabel;
+                    const matches = (res && res.matches) || [];
+                    const hard = matches.filter(m => m.hard);
+                    if (hard.length) {
+                        hard.forEach(m => setErr(errIdFor(m.field),
+                            `This ${labelFor[m.field] || m.field} is already registered (Ref ${m.ref} · ${m.status}). Use “Check status” instead of registering again.`));
+                        return;
+                    }
+                    const soft = matches.filter(m => !m.hard);
+                    if (soft.length && !window.app._regNameWarned) {
+                        window.app._regNameWarned = true;
+                        setErr('reg-full-name', 'Someone with this name has already applied. If that is you, use “Check status”. If not, press Next again to continue.');
+                        return;
+                    }
+                    if (window.app) window.app._regGotoStep(3);
+                })
+                .catch(() => {
+                    // Network issue — don't hard-block; submit-time check still guards duplicates.
+                    step2Next.disabled = false;
+                    step2Next.textContent = origLabel;
+                    if (window.app) window.app._regGotoStep(3);
+                });
         });
     }
 

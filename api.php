@@ -828,6 +828,53 @@ try {
             ]);
             break;
 
+        // ── ONBOARDING: Real-time duplicate check ───────────────────
+        // Lets the registration form warn the user BEFORE they finish, so nobody
+        // creates several accounts. phone/email/national_id are hard duplicates;
+        // full_name is a soft match (names are not unique) returned as a warning.
+        case 'check_duplicate':
+            $phone      = trim($_GET['phone'] ?? '');
+            $email      = trim($_GET['email'] ?? '');
+            $nationalId = trim($_GET['national_id'] ?? '');
+            $fullName   = trim($_GET['full_name'] ?? '');
+            $matches    = [];
+
+            $lookup = function ($sql, $val, $field, $hard) use ($mysqli, &$matches) {
+                $st = $mysqli->prepare($sql);
+                $st->bind_param('s', $val);
+                $st->execute();
+                $row = stmt_fetch_one($st);
+                if ($row) {
+                    $matches[] = [
+                        'field'  => $field,
+                        'hard'   => $hard,
+                        'ref'    => $row['application_ref'],
+                        'status' => $row['status'],
+                        'type'   => $row['user_type'],
+                    ];
+                }
+            };
+
+            if ($phone !== '') {
+                $lookup("SELECT application_ref, status, user_type FROM onboarding_applications WHERE phone_number = ? LIMIT 1", $phone, 'phone', true);
+            }
+            if ($email !== '') {
+                $lookup("SELECT application_ref, status, user_type FROM onboarding_applications WHERE email <> '' AND email = ? LIMIT 1", $email, 'email', true);
+            }
+            if ($nationalId !== '') {
+                $lookup("SELECT application_ref, status, user_type FROM onboarding_applications WHERE national_id <> '' AND national_id = ? LIMIT 1", $nationalId, 'national_id', true);
+            }
+            if ($fullName !== '') {
+                $lookup("SELECT application_ref, status, user_type FROM onboarding_applications WHERE full_name = ? LIMIT 1", $fullName, 'name', false);
+            }
+
+            echo json_encode([
+                'success' => true,
+                'exists'  => count($matches) > 0,
+                'matches' => $matches,
+            ]);
+            break;
+
         // ── ONBOARDING: Check application status ────────────────────
         case 'check_application':
             $ref  = strtoupper(trim($_GET['ref'] ?? ''));
