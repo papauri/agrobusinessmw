@@ -857,6 +857,10 @@ class AgroBusinessRevolution {
         // Replay the correct view when the browser back/forward button is used.
         window.addEventListener('popstate', (e) => {
             if (!e.state || e.state.screen === 'dashboard') {
+                // On a standalone function page the base entry is the page itself,
+                // not a real dashboard — pressing back past the in-page view should
+                // return to the PREVIOUS page, not jump home.
+                if (this._isPageMode) { this._leaveToPreviousPage(); return; }
                 this.showScreen('dashboard');
             } else if (e.state.view) {
                 this._replayState(e.state);
@@ -874,9 +878,11 @@ class AgroBusinessRevolution {
             backBtn.style.transform = 'scale(0.9)';
             setTimeout(() => { backBtn.style.transform = ''; }, 150);
         }
-        // On a standalone function page there is no in-page dashboard — go home.
+        // On a standalone function page, walk browser history back. This unwinds
+        // any in-page steps (pickers, drill-ins) first; when it reaches the page's
+        // base entry the popstate handler routes to the actual previous page.
         if (this._isPageMode) {
-            if (document.referrer && new URL(document.referrer, location.href).pathname.endsWith('index.php')) {
+            if (window.history.length > 1) {
                 history.back();
             } else {
                 window.location.href = 'index.php';
@@ -888,6 +894,24 @@ class AgroBusinessRevolution {
             history.back();
         } else {
             this.showScreen('dashboard');
+        }
+    }
+
+    // Leave a function page back to the page the user came from. Uses the real
+    // previous history entry when we arrived from within the site; otherwise (a
+    // direct landing or external referrer) falls back to the home page.
+    _leaveToPreviousPage() {
+        if (this._leavingPage) return;              // guard against a double popstate
+        this._leavingPage = true;
+        let sameOrigin = false;
+        try {
+            sameOrigin = !!document.referrer &&
+                new URL(document.referrer, location.href).origin === location.origin;
+        } catch (_) { sameOrigin = false; }
+        if (sameOrigin && window.history.length > 1) {
+            history.back();
+        } else {
+            window.location.href = 'index.php';
         }
     }
 
