@@ -133,6 +133,44 @@ class AgroBusinessRevolution {
             28: { lat: -14.0006, lon: 35.2656, name: 'Lilongwe Rural', region: 'Central' }
         };
 
+        // Accurate district-HQ coordinates keyed by NAME. The legacy districtCoords
+        // above is keyed 1–28 which does NOT match the DB ids, so weather was fetched
+        // for the wrong location. Resolving by name (via _districtCoords) fixes it.
+        this.districtCoordsByName = {
+            // Northern
+            'chitipa': { lat: -9.7019, lon: 33.2699 },
+            'karonga': { lat: -9.9333, lon: 33.9333 },
+            'likoma': { lat: -12.0764, lon: 34.7331 },
+            'mzimba': { lat: -11.8934, lon: 33.6009 },
+            'mzuzu': { lat: -11.4656, lon: 34.0208 },
+            'nkhata bay': { lat: -11.6060, lon: 34.2960 },
+            'rumphi': { lat: -11.0186, lon: 33.8582 },
+            // Central
+            'dedza': { lat: -14.3785, lon: 34.3332 },
+            'dowa': { lat: -13.6540, lon: 33.9250 },
+            'kasungu': { lat: -13.0333, lon: 33.4833 },
+            'lilongwe': { lat: -13.9626, lon: 33.7741 },
+            'mchinji': { lat: -13.7986, lon: 32.8797 },
+            'nkhotakota': { lat: -12.9274, lon: 34.2961 },
+            'ntcheu': { lat: -14.8206, lon: 34.6360 },
+            'ntchisi': { lat: -13.3667, lon: 33.9167 },
+            'salima': { lat: -13.7804, lon: 34.4587 },
+            // Southern
+            'balaka': { lat: -14.9789, lon: 34.9560 },
+            'blantyre': { lat: -15.7861, lon: 35.0058 },
+            'chikwawa': { lat: -16.0353, lon: 34.8010 },
+            'chiradzulu': { lat: -15.7005, lon: 35.1450 },
+            'machinga': { lat: -15.1667, lon: 35.2167 },
+            'mangochi': { lat: -14.4784, lon: 35.2645 },
+            'mulanje': { lat: -16.0319, lon: 35.5077 },
+            'mwanza': { lat: -15.6031, lon: 34.5178 },
+            'neno': { lat: -15.3985, lon: 34.6539 },
+            'nsanje': { lat: -16.9200, lon: 35.2620 },
+            'phalombe': { lat: -15.8060, lon: 35.6510 },
+            'thyolo': { lat: -16.0700, lon: 35.1400 },
+            'zomba': { lat: -15.3833, lon: 35.3167 }
+        };
+
         // Crop categories for better organization
         this.cropCategories = {
             'cereal': ['Maize', 'Rice', 'Sorghum', 'Millet'],
@@ -1669,8 +1707,8 @@ class AgroBusinessRevolution {
     }
 
     showDistrictActions(districtId) {
-        const district = this.districtCoords[districtId];
-        if (!district) return;
+        const district = this._districtCoords(districtId)
+            || { name: (this._districtsById && this._districtsById[Number(districtId)]) || 'District' };
 
         this.pushNavState('district_actions', { districtId });
         this.showScreen('content');
@@ -1990,7 +2028,8 @@ class AgroBusinessRevolution {
     // Open-Meteo Weather API (FREE - Same as USSD)
     async getWeatherData(districtId) {
         try {
-            const coords = this.districtCoords[districtId];
+            if (!this._districtsById) await this.loadDistricts();
+            const coords = this._districtCoords(districtId);
             if (!coords) {
                 throw new Error('District coordinates not found');
             }
@@ -2195,11 +2234,28 @@ class AgroBusinessRevolution {
     async loadDistricts() {
         try {
             const response = await this.apiCall('api.php?action=districts');
-            return response.success ? (response.data || []) : [];
+            const data = response.success ? (response.data || []) : [];
+            // Cache id → name so weather/actions can resolve the real district by DB id.
+            if (data.length) {
+                this._districtsById = this._districtsById || {};
+                data.forEach(d => { this._districtsById[Number(d.id)] = d.name; });
+            }
+            return data;
         } catch (error) {
             console.error('❌ Error loading districts:', error);
             return [];
         }
+    }
+
+    // Resolve accurate coordinates + name for a DB district id, keyed by name so it
+    // is immune to the id/position mismatch in the legacy districtCoords table.
+    _districtCoords(districtId) {
+        const name = this._districtsById && this._districtsById[Number(districtId)];
+        if (!name) return null;
+        const key = String(name).trim().toLowerCase().replace(/\s+(rural|island)$/, '');
+        const c = this.districtCoordsByName[key];
+        if (!c) return null;
+        return { lat: c.lat, lon: c.lon, name, region: this._regionForDistrict(name) };
     }
 
     async loadCrops() {
