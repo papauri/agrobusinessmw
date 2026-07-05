@@ -275,13 +275,16 @@ if (isset($_GET['logout'])) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin — AgroBusiness Malawi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Inter, system-ui, sans-serif; background: #f5f2eb; color: #3e3930; min-height: 100vh; }
+body { font-family: 'DM Sans', system-ui, sans-serif; background: #f5f2eb; color: #3e3930; min-height: 100vh; }
 a { color: #8B7355; text-decoration: none; transition: color 0.18s ease; }
 a:hover { color: #7a6448; }
 .top-bar { background: #fff; border-bottom: 1px solid #e8e2d9; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(70,60,50,0.06); }
-.top-bar h1 { font-size: 1.1rem; font-weight: 700; color: #3e3930; }
+.top-bar h1 { font-family: 'DM Serif Display', Georgia, serif; font-size: 1.25rem; font-weight: 400; color: #3e3930; }
 .top-bar small { color: #6b5f52; }
 .logout { padding: .5rem 1.2rem; background: transparent; border: 1.5px solid #d5cfc4; border-radius: 6px; color: #6b5f52; font-size: .85rem; font-weight: 600; cursor: pointer; transition: all 0.18s ease; }
 .logout:hover { background: #b94040; border-color: #b94040; color: #fff; }
@@ -670,11 +673,14 @@ function showLogin(?string $error): void {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin Login — AgroBusiness</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Inter, system-ui, sans-serif; background: #f5f2eb; color: #3e3930; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+body { font-family: 'DM Sans', system-ui, sans-serif; background: #f5f2eb; color: #3e3930; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .card { background: #fff; border: 1px solid #e8e2d9; border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 360px; box-shadow: 0 8px 24px rgba(70,60,50,0.12); }
-h2 { margin-bottom: 1.5rem; font-size: 1.4rem; text-align: center; color: #3e3930; font-weight: 700; }
+h2 { margin-bottom: 1.5rem; font-family: 'DM Serif Display', Georgia, serif; font-size: 1.6rem; text-align: center; color: #3e3930; font-weight: 400; }
 label { display: block; font-size: .85rem; color: #6b5f52; margin-bottom: .4rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 input { width: 100%; padding: .875rem 1rem; background: #faf8f4; border: 1.5px solid #d5cfc4; border-radius: 8px; color: #3e3930; font-size: .95rem; margin-bottom: 1.25rem; outline: none; font-family: inherit; transition: all 0.18s ease; }
 input:focus { border-color: #8B7355; background: #fff; box-shadow: 0 0 0 3px rgba(139,115,85,0.1); }
