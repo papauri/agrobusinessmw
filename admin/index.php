@@ -4,16 +4,34 @@
  * Review and approve/deny KYC onboarding applications.
  *
  * Access: https://agrobusinessmw.com/admin/
- * Protected by HTTP Basic Auth via .htpasswd (see below) OR the ADMIN_TOKEN env var.
+ * Protected by a username + password login (credentials in the admin_users table,
+ * seeded from ADMIN_USER / ADMIN_PASSWORD in .env on first run).
  *
  * Quick setup:
- *   Add to .env:  ADMIN_TOKEN=your_secret_token_here
+ *   Add to .env:  ADMIN_USER=... and ADMIN_PASSWORD=...
  *   Then access via browser — login prompt will appear.
  */
 
 session_start();
 error_reporting(0);
 ini_set('display_errors', 0);
+
+// ─── CSRF TOKEN ───────────────────────────────────────────────────────────────
+// Minted at session-start time — BEFORE the login gate — so the login form,
+// which is served to an unauthenticated visitor, carries a valid token too.
+// One token per session, reused for every mutating POST.
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
+// Validate the CSRF token on a state-changing POST. Constant-time compare via
+// hash_equals(). Must be called (and must pass) before any DB write.
+function csrf_valid(): bool {
+    return isset($_POST['csrf_token'], $_SESSION['csrf_token'])
+        && is_string($_POST['csrf_token'])
+        && hash_equals($_SESSION['csrf_token'], $_POST['csrf_token']);
+}
 
 // ─── LOAD ENV ─────────────────────────────────────────────────────────────────
 $envFile = dirname(__DIR__) . '/.env';
@@ -31,6 +49,9 @@ $db      = @new mysqli($host, $_ENV['DB_USER'] ?? '', $_ENV['DB_PASS'] ?? '', $_
 if ($db->connect_error) die('<p style="color:red">DB connection failed.</p>');
 $db->set_charset('utf8mb4');
 
+// FEWS reference-rate helpers — called directly by the price-refresh handler below.
+require_once dirname(__DIR__) . '/config/fews.php';
+
 // ─── ADMIN AUTH ───────────────────────────────────────────────────────────────
 // Credentials live in the `admin_users` table (created/seeded from .env on
 // first run by api.php's admin_get_user()) — never hardcoded here.
@@ -39,7 +60,6 @@ $db->query(
         id INT AUTO_INCREMENT PRIMARY KEY,
         username VARCHAR(100) NOT NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
-        admin_token VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )"
@@ -48,22 +68,108 @@ $adminRow = ($res = $db->query("SELECT username, password_hash FROM admin_users 
 if (!$adminRow) {
     $seedUser  = $_ENV['ADMIN_USER'] ?? 'admin';
     $seedPass  = $_ENV['ADMIN_PASSWORD'] ?? bin2hex(random_bytes(8));
-    $seedToken = $_ENV['ADMIN_TOKEN'] ?? bin2hex(random_bytes(16));
     $hash = password_hash($seedPass, PASSWORD_DEFAULT);
-    $stmt = $db->prepare("INSERT INTO admin_users (username, password_hash, admin_token) VALUES (?, ?, ?)");
-    $stmt->bind_param('sss', $seedUser, $hash, $seedToken);
+    $stmt = $db->prepare("INSERT INTO admin_users (username, password_hash) VALUES (?, ?)");
+    $stmt->bind_param('ss', $seedUser, $hash);
     $stmt->execute();
     $adminRow = ['username' => $seedUser, 'password_hash' => $hash];
 }
 
-if (!isset($_SESSION['admin_logged_in'])) {
-    if (isset($_POST['password']) && $_POST['username'] === $adminRow['username'] && password_verify($_POST['password'], $adminRow['password_hash'])) {
-        $_SESSION['admin_logged_in'] = true;
-    } else {
-        if (isset($_POST['password'])) {
-            $loginError = 'Invalid credentials.';
+// ─── LOGIN THROTTLE ───────────────────────────────────────────────────────────
+// Additive, lazily-created audit + throttle table. Never altered, never dropped.
+$db->query(
+    "CREATE TABLE IF NOT EXISTS admin_login_attempts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ip VARCHAR(45) NOT NULL,
+        username VARCHAR(100) NULL,
+        attempted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        success TINYINT(1) NOT NULL DEFAULT 0,
+        INDEX idx_ip_time (ip, attempted_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+);
+
+// Read the client IP straight from REMOTE_ADDR — the real TCP peer. NEVER trust
+// X-Forwarded-For here: it is an attacker-controlled request header, so a client
+// could set a fresh value on every request and defeat the throttle entirely.
+$clientIp = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
+$LOGIN_MAX_FAILS = 5;   // failures per IP...
+$LOGIN_WINDOW_M  = 15;  // ...within this many minutes → locked out.
+
+// Count recent failures for an IP. FAIL OPEN on any DB error (return 0): a broken
+// or unreadable attempts table must never permanently brick the admin panel. The
+// password is still required regardless — this only governs the throttle.
+function admin_recent_fails(mysqli $db, string $ip, int $windowMinutes): int {
+    $n = 0;
+    if ($stmt = $db->prepare(
+        "SELECT COUNT(*) FROM admin_login_attempts
+         WHERE ip = ? AND success = 0
+           AND attempted_at > (NOW() - INTERVAL ? MINUTE)"
+    )) {
+        $stmt->bind_param('si', $ip, $windowMinutes);
+        if ($stmt->execute()) {
+            $stmt->bind_result($n);
+            $stmt->fetch();
         }
-        showLogin($loginError ?? null);
+        $stmt->close();
+    }
+    return (int) $n;
+}
+
+// Record one attempt. Stores IP, username, timestamp and success flag ONLY — the
+// submitted password is never written here, in any form (plaintext or hashed).
+function admin_record_attempt(mysqli $db, string $ip, ?string $username, bool $success): void {
+    if ($stmt = $db->prepare(
+        "INSERT INTO admin_login_attempts (ip, username, success) VALUES (?, ?, ?)"
+    )) {
+        $flag = $success ? 1 : 0;
+        $stmt->bind_param('ssi', $ip, $username, $flag);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
+
+// On a successful login, clear this IP's prior failures so a stale window can't
+// keep blocking a legitimate admin who has just authenticated.
+function admin_clear_fails(mysqli $db, string $ip): void {
+    if ($stmt = $db->prepare("DELETE FROM admin_login_attempts WHERE ip = ? AND success = 0")) {
+        $stmt->bind_param('s', $ip);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
+
+if (!isset($_SESSION['admin_logged_in'])) {
+    if (isset($_POST['password'])) {
+        // Reject cross-site / tokenless login POSTs before touching credentials.
+        // Generic message — no hint about whether the failure was CSRF or creds.
+        if (!csrf_valid()) {
+            showLogin('Invalid credentials.');
+            exit;
+        }
+
+        $submittedUser = is_string($_POST['username'] ?? null) ? $_POST['username'] : '';
+
+        // Throttle BEFORE password_verify() so we never burn bcrypt cycles on an
+        // attacker. The blocked attempt is still recorded (keeps the window rolling).
+        if (admin_recent_fails($db, $clientIp, $LOGIN_WINDOW_M) >= $LOGIN_MAX_FAILS) {
+            admin_record_attempt($db, $clientIp, $submittedUser, false);
+            showLogin('Too many failed attempts. Please try again in about ' . $LOGIN_WINDOW_M . ' minutes.');
+            exit;
+        }
+
+        if ($submittedUser === $adminRow['username']
+            && password_verify($_POST['password'], $adminRow['password_hash'])) {
+            admin_record_attempt($db, $clientIp, $submittedUser, true);
+            admin_clear_fails($db, $clientIp);
+            $_SESSION['admin_logged_in'] = true;
+        } else {
+            admin_record_attempt($db, $clientIp, $submittedUser, false);
+            showLogin('Invalid credentials.');
+            exit;
+        }
+    } else {
+        showLogin(null);
         exit;
     }
 }
@@ -82,7 +188,7 @@ $db->query("CREATE TABLE IF NOT EXISTS price_overrides (
 
 // ─── HANDLE APPROVE / DENY ────────────────────────────────────────────────────
 $actionMsg = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_valid()) {
     $id     = (int)$_POST['review_id'];
     $action = $_POST['review_action'] ?? '';
     $notes  = trim($_POST['review_notes'] ?? '');
@@ -102,7 +208,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id'])) {
         $s2 = $db->prepare("SELECT full_name, email, application_ref FROM onboarding_applications WHERE id=?");
         $s2->bind_param('i', $id);
         $s2->execute();
-        $app = $s2->get_result()->fetch_assoc();
+        // No get_result(): mysqlnd is not guaranteed on the host. Bind + fetch instead.
+        $s2->bind_result($fullName, $email, $appRef);
+        $app = $s2->fetch()
+            ? ['full_name' => $fullName, 'email' => $email, 'application_ref' => $appRef]
+            : null;
+        $s2->close();
 
         if ($app && $app['email']) {
             if ($action === 'approve') {
@@ -125,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id'])) {
 
 // ─── HANDLE COMMUNITY PRICE REVIEW (approve / reject) ─────────────────────────
 $priceMsg = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['price_review_id'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['price_review_id']) && csrf_valid()) {
     $pid   = (int)$_POST['price_review_id'];
     $pact  = $_POST['price_action'] ?? '';
     $pnote = trim($_POST['price_notes'] ?? '');
@@ -146,25 +257,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['price_review_id'])) {
 $pmMsg = '';
 $pmErr = '';
 
-// a) Refresh reference prices from the upstream source (FEWS) via the API action.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['refresh_source'])) {
-    $token  = $_ENV['ADMIN_TOKEN'] ?? 'agro_admin_2024';
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $root   = str_replace('/admin/index.php', '', $_SERVER['SCRIPT_NAME']);
-    $apiUrl = $scheme . '://' . $_SERVER['HTTP_HOST'] . $root . '/api.php?action=fews_prices_refresh&token=' . urlencode($token);
-    $ctx  = stream_context_create(['http' => ['timeout' => 30, 'ignore_errors' => true]]);
-    $resp = @file_get_contents($apiUrl, false, $ctx);
-    $data = $resp ? json_decode($resp, true) : null;
-    if ($data && !empty($data['success'])) {
-        $pmMsg = "Reference prices refreshed from source — {$data['rows']} rows"
-               . (!empty($data['error']) ? " (source note: {$data['error']})" : '') . '.';
+// a) Refresh reference prices from the upstream source (FEWS). Runs the FEWS
+//    fetch directly (this handler is already past the login gate — no token needed).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['refresh_source']) && csrf_valid()) {
+    $cacheFile = dirname(__DIR__) . '/config/fews_prices_cache.json';
+    if (file_exists($cacheFile)) unlink($cacheFile);
+    $result = fews_get_prices($db);
+    $rows   = count($result['data'] ?? []);
+    if (empty($result['data']) && !empty($result['error'])) {
+        $pmErr = 'Refresh failed: ' . htmlspecialchars($result['error']) . '.';
     } else {
-        $pmErr = 'Refresh failed: ' . htmlspecialchars($data['error'] ?? 'source unreachable') . '.';
+        $pmMsg = "Reference prices refreshed from source — {$rows} rows"
+               . (!empty($result['error']) ? " (source note: {$result['error']})" : '') . '.';
     }
 }
 
 // b) Manually add an approved community price.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['manual_mode'] ?? '') === 'community') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['manual_mode'] ?? '') === 'community' && csrf_valid()) {
     $cid = (int)($_POST['m_crop_id'] ?? 0);
     $did = (int)($_POST['m_district_id'] ?? 0);
     $kg  = (float)($_POST['m_price_kg'] ?? 0);
@@ -183,7 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['manual_mode'] ?? '') === '
 }
 
 // c) Manually set / update a reference override (district 0 = all districts).
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['manual_mode'] ?? '') === 'reference') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['manual_mode'] ?? '') === 'reference' && csrf_valid()) {
     $cid  = (int)($_POST['m_crop_id'] ?? 0);
     $did  = (int)($_POST['m_district_id'] ?? 0);
     $kg   = (float)($_POST['m_price_kg'] ?? 0);
@@ -200,7 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['manual_mode'] ?? '') === '
 }
 
 // d) Delete a reference override.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_override_id'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_override_id']) && csrf_valid()) {
     $oid = (int)$_POST['delete_override_id'];
     if ($oid > 0) {
         $q = $db->prepare("DELETE FROM price_overrides WHERE id=?");
@@ -441,6 +550,7 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
             <td class="actions">
                 <?php if ($a['status'] === 'pending'): ?>
                 <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                     <input type="hidden" name="review_id" value="<?= $a['id'] ?>">
                     <input type="text" name="review_notes" placeholder="Notes (optional)">
                     <button type="submit" name="review_action" value="approve" class="btn-approve">Approve</button>
@@ -507,6 +617,7 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
                 <td data-sort-value="<?= strtotime($p['created_at']) ?>" style="font-size:.78rem;color:#a3a3a3"><?= date('d/m/Y H:i', strtotime($p['created_at'])) ?></td>
                 <td class="actions">
                     <form method="post">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                         <input type="hidden" name="price_review_id" value="<?= $p['id'] ?>">
                         <input type="text" name="price_notes" placeholder="Reason (if rejecting)">
                         <button type="submit" name="price_action" value="approve" class="btn-approve">Approve</button>
@@ -534,6 +645,7 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
                 Re-fetches the AgroBiz reference rates from the upstream source and refreshes the cache.
             </p>
             <form method="post">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                 <button type="submit" name="refresh_source" value="1" class="btn-approve">Refresh from source</button>
             </form>
         </div>
@@ -542,6 +654,7 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
         <div style="background:#fff;border:1px solid #e8e2d9;border-radius:12px;padding:1.5rem">
             <h3 style="font-size:1rem;margin-bottom:1rem;color:#3e3930">Set an individual price</h3>
             <form method="post" id="manual-price-form" style="display:grid;gap:.75rem">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                 <div style="display:flex;gap:1rem;font-size:.85rem;color:#6b5f52">
                     <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer">
                         <input type="radio" name="manual_mode" value="community" checked> Community price
@@ -581,6 +694,7 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
                 <td style="font-size:.78rem;color:#a3a3a3"><?= date('d/m/Y H:i', strtotime($o['updated_at'])) ?></td>
                 <td class="actions">
                     <form method="post" onsubmit="return confirm('Remove this override?')">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                         <input type="hidden" name="delete_override_id" value="<?= (int)$o['id'] ?>">
                         <button type="submit" class="btn-deny">Delete</button>
                     </form>
@@ -694,6 +808,7 @@ button:hover { background: #7a6448; box-shadow: 0 6px 20px rgba(139,115,85,0.3);
     <h2>🌾 Admin Login</h2>
     <?php if ($error): ?><p class="error"><?= htmlspecialchars($error) ?></p><?php endif; ?>
     <form method="post">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
         <label>Username</label>
         <input type="text" name="username" autocomplete="username" required>
         <label>Password</label>

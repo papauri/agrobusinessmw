@@ -54,6 +54,9 @@ function stmt_fetch_one(mysqli_stmt $stmt): ?array
     return $rows[0] ?? null;
 }
 
+// FEWS reference-rate helpers (fews_get_prices/fews_fetch_prices/fews_district_map/fews_match_district)
+require_once __DIR__ . '/config/fews.php';
+
 // ── Community price moderation helpers (Phase 1: statistical gate) ──────────
 /** Median of a numeric list — outlier-resistant central value. */
 function cp_median(array $vals): float
@@ -326,33 +329,27 @@ function admin_get_user(mysqli $mysqli): ?array {
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(100) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
-            admin_token VARCHAR(255) NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )"
     );
 
-    $result = $mysqli->query("SELECT username, password_hash, admin_token FROM admin_users LIMIT 1");
+    $result = $mysqli->query("SELECT username, password_hash FROM admin_users LIMIT 1");
     $row = $result ? $result->fetch_assoc() : null;
 
     if (!$row) {
         $seedUser  = $_ENV['ADMIN_USER'] ?? 'admin';
         $seedPass  = $_ENV['ADMIN_PASSWORD'] ?? bin2hex(random_bytes(8));
-        $seedToken = $_ENV['ADMIN_TOKEN'] ?? bin2hex(random_bytes(16));
         $hash = password_hash($seedPass, PASSWORD_DEFAULT);
         $stmt = $mysqli->prepare(
-            "INSERT INTO admin_users (username, password_hash, admin_token) VALUES (?, ?, ?)"
+            "INSERT INTO admin_users (username, password_hash) VALUES (?, ?)"
         );
-        $stmt->bind_param('sss', $seedUser, $hash, $seedToken);
+        $stmt->bind_param('ss', $seedUser, $hash);
         $stmt->execute();
-        $row = ['username' => $seedUser, 'password_hash' => $hash, 'admin_token' => $seedToken];
+        $row = ['username' => $seedUser, 'password_hash' => $hash];
     }
 
     return $cached = $row;
-}
-
-function admin_get_token(mysqli $mysqli): string {
-    return admin_get_user($mysqli)['admin_token'] ?? '';
 }
 
 // Get action parameter
@@ -897,186 +894,6 @@ try {
             echo json_encode(['success' => true, 'data' => $row, 'timestamp' => date('c')]);
             break;
 
-        // ── ONBOARDING: Admin — list applications ───────────────────
-        case 'admin_applications':
-            $adminToken = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? ($_GET['token'] ?? '');
-            $envAdminToken = admin_get_token($mysqli);
-            if ($adminToken !== $envAdminToken) {
-                http_response_code(200);
-                echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-                exit;
-            }
-
-            $status = $_GET['status'] ?? 'pending';
-            if (!in_array($status, ['pending', 'approved', 'denied', 'all'])) $status = 'pending';
-
-            $sql = "SELECT a.id, a.application_ref, a.user_type, a.full_name, a.phone_number,
-                           a.email, a.national_id, a.channel, a.status, a.created_at, a.reviewed_at,
-                           d.name as district_name
-                    FROM onboarding_applications a
-                    LEFT JOIN districts d ON a.district_id = d.id";
-            if ($status !== 'all') {
-                $stmt3 = $mysqli->prepare($sql . " WHERE a.status = ? ORDER BY a.created_at DESC LIMIT 100");
-                $stmt3->bind_param('s', $status);
-                $stmt3->execute();
-                $apps = stmt_fetch_all($stmt3);
-            } else {
-                $result = $mysqli->query($sql . " ORDER BY a.created_at DESC LIMIT 100");
-                $apps = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
-            }
-
-            echo json_encode(['success' => true, 'data' => $apps, 'count' => count($apps), 'timestamp' => date('c')]);
-            break;
-
-        // ── ONBOARDING: Admin — approve / deny ──────────────────────
-        case 'admin_review':
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('POST method required');
-
-            $adminToken = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
-            $envAdminToken = admin_get_token($mysqli);
-            if ($adminToken !== $envAdminToken) {
-                http_response_code(200);
-                echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-                exit;
-            }
-
-            $body    = json_decode(file_get_contents('php://input'), true) ?? [];
-            $appId   = (int)($body['application_id'] ?? 0);
-            $action  = $body['action'] ?? '';
-            $notes   = trim($body['notes'] ?? '');
-
-            if (!$appId || !in_array($action, ['approve', 'deny'])) {
-                throw new Exception('application_id and action (approve/deny) are required');
-            }
-
-            $newStatus = $action === 'approve' ? 'approved' : 'denied';
-            $stmt = $mysqli->prepare(
-                "UPDATE onboarding_applications
-                 SET status=?, admin_notes=?, denial_reason=?, reviewed_at=NOW()
-                 WHERE id=?"
-            );
-            $denial = $action === 'deny' ? $notes : null;
-            $adminNotes = $action === 'approve' ? $notes : null;
-            $stmt->bind_param('sssi', $newStatus, $adminNotes, $denial, $appId);
-            $stmt->execute();
-
-            // Fetch full applicant details
-            $stmt2 = $mysqli->prepare(
-                "SELECT full_name, email, phone_number, application_ref, user_type,
-                        district_id, village, business_name, crops_of_interest
-                 FROM onboarding_applications WHERE id=?"
-            );
-            $stmt2->bind_param('i', $appId);
-            $stmt2->execute();
-            $app = stmt_fetch_one($stmt2);
-
-            $promoted = false;
-            if ($action === 'approve' && $app) {
-                if ($app['user_type'] === 'seller') {
-                    $cStmt = $mysqli->prepare(
-                        "INSERT INTO seller_contact_details (phone_number, email, address) VALUES (?,?,?)"
-                    );
-                    $addr = $app['village'] ?? '';
-                    $cStmt->bind_param('sss', $app['phone_number'], $app['email'], $addr);
-                    $cStmt->execute();
-                    $contactId = $mysqli->insert_id;
-                    $sStmt = $mysqli->prepare(
-                        "INSERT INTO sellers (name, district_id, contact_id) VALUES (?,?,?)"
-                    );
-                    $sStmt->bind_param('sii', $app['full_name'], $app['district_id'], $contactId);
-                    $sStmt->execute();
-                    $promoted = true;
-                } elseif ($app['user_type'] === 'buyer') {
-                    $cStmt = $mysqli->prepare(
-                        "INSERT INTO buyer_contact_details (phone_number, email, address) VALUES (?,?,?)"
-                    );
-                    $addr = $app['village'] ?? '';
-                    $cStmt->bind_param('sss', $app['phone_number'], $app['email'], $addr);
-                    $cStmt->execute();
-                    $contactId = $mysqli->insert_id;
-                    $bStmt = $mysqli->prepare(
-                        "INSERT INTO buyers (name, district_id, contact_id) VALUES (?,?,?)"
-                    );
-                    $bStmt->bind_param('sii', $app['full_name'], $app['district_id'], $contactId);
-                    $bStmt->execute();
-                    $promoted = true;
-                }
-                // farmers have no separate table; their approval is tracked in onboarding_applications only
-            }
-
-            $adminEmail2 = trim($_ENV['Username'] ?? 'info@promanaged-it.com');
-            $adminCc2    = 'johnpaulchirwa@gmail.com';
-
-            if ($app && $app['email']) {
-                $roleLabel2 = ucfirst($app['user_type'] ?? 'member');
-                if ($action === 'approve') {
-                    $subject = "Your Application is Approved — {$app['application_ref']}";
-                    $html    = email_html(
-                        '<div style="text-align:center;margin-bottom:28px;">'
-                        . '<div style="display:inline-block;background:#dcfce7;border-radius:50%;width:64px;height:64px;line-height:64px;font-size:32px;">✓</div>'
-                        . '</div>'
-                        . '<h2 style="margin:0 0 16px;font-size:20px;color:#1f2937;text-align:center;">Application Approved!</h2>'
-                        . '<p style="margin:0 0 12px;font-size:15px;color:#374151;">Dear <strong>' . htmlspecialchars($app['full_name']) . '</strong>,</p>'
-                        . '<p style="margin:0 0 20px;font-size:15px;color:#374151;">Great news! Your application has been <strong style="color:#16a34a;">approved</strong> and you are now officially registered as a <strong>' . $roleLabel2 . '</strong> on AgroBusiness Malawi.</p>'
-                        . '<table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;margin-bottom:24px;">'
-                        . '<tbody>'
-                        . email_row('Reference', $app['application_ref'])
-                        . email_row('Role', $roleLabel2)
-                        . email_row('Approved', date('d M Y'))
-                        . ($notes ? email_row('Admin Notes', $notes) : '')
-                        . '</tbody></table>'
-                        . '<p style="margin:0 0 24px;font-size:15px;color:#374151;">You can now access all platform features — live crop prices, market insights, buyer and seller listings, farming tips, and weather forecasts.</p>'
-                        . '<a href="https://agrobusinessmw.com" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">Visit AgroBusiness Malawi</a>'
-                        . '<p style="margin:28px 0 0;font-size:13px;color:#6b7280;">Welcome to the platform! Questions? <a href="mailto:info@agrobusinessmw.com" style="color:#16a34a;">info@agrobusinessmw.com</a></p>'
-                    );
-                } else {
-                    $subject = "Application Update — {$app['application_ref']}";
-                    $html    = email_html(
-                        '<h2 style="margin:0 0 16px;font-size:20px;color:#1f2937;">Application Update</h2>'
-                        . '<p style="margin:0 0 12px;font-size:15px;color:#374151;">Dear <strong>' . htmlspecialchars($app['full_name']) . '</strong>,</p>'
-                        . '<p style="margin:0 0 20px;font-size:15px;color:#374151;">Thank you for applying to AgroBusiness Malawi. After review, we are unable to approve your application <strong>' . htmlspecialchars($app['application_ref']) . '</strong> at this time.</p>'
-                        . ($notes
-                            ? '<table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#fff7ed;border-radius:6px;border:1px solid #fed7aa;margin-bottom:24px;"><tbody>'
-                              . email_row('Reason', $notes)
-                              . '</tbody></table>'
-                            : '')
-                        . '<p style="margin:0 0 24px;font-size:15px;color:#374151;">If you believe this is an error or wish to reapply, please contact us and we will be happy to assist you.</p>'
-                        . '<a href="mailto:info@agrobusinessmw.com" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">Contact Us</a>'
-                        . '<p style="margin:28px 0 0;font-size:13px;color:#6b7280;">We appreciate your interest in AgroBusiness Malawi.</p>'
-                    );
-                }
-                send_smtp_email($app['email'], $subject, $html);
-            }
-
-            // Admin confirmation of the decision
-            $decisionLabel = $action === 'approve' ? 'APPROVED' : 'DENIED';
-            $decisionColor = $action === 'approve' ? '#16a34a' : '#dc2626';
-            $adminDecisionHtml = email_html(
-                '<h2 style="margin:0 0 16px;font-size:20px;color:#1f2937;">Application ' . $decisionLabel . '</h2>'
-                . '<p style="margin:0 0 20px;font-size:15px;color:#374151;">You have <strong style="color:' . $decisionColor . ';">' . strtolower($decisionLabel) . '</strong> the following application.</p>'
-                . '<table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;margin-bottom:24px;">'
-                . '<tbody>'
-                . email_row('Reference', $app['application_ref'] ?? '—')
-                . email_row('Applicant', $app['full_name'] ?? '—')
-                . email_row('Role', ucfirst($app['user_type'] ?? '—'))
-                . email_row('Decision', $decisionLabel)
-                . email_row('Reviewed', date('d M Y, H:i'))
-                . ($notes ? email_row('Notes', $notes) : '')
-                . ($promoted ? email_row('Promoted to DB', 'Yes — added to ' . ($app['user_type'] === 'seller' ? 'sellers' : 'buyers') . ' table') : '')
-                . '</tbody></table>'
-                . '<a href="https://agrobusinessmw.com/?admin" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">Admin Panel</a>'
-            );
-            send_smtp_email($adminEmail2, "Decision: {$decisionLabel} — " . ($app['application_ref'] ?? ''), $adminDecisionHtml, '', $adminCc2);
-
-            echo json_encode([
-                'success'   => true,
-                'message'   => "Application {$newStatus}",
-                'ref'       => $app['application_ref'] ?? '',
-                'promoted'  => $promoted,
-                'timestamp' => date('c')
-            ]);
-            break;
-
         // ─── PRICE DATA ─────────────────────────────────────────────────────────
 
         case 'dual_crop_prices':
@@ -1283,107 +1100,8 @@ try {
             ]);
             break;
 
-        // ── COMMUNITY PRICE REVIEW: admin queue ─────────────────────
-        case 'price_review_list':
-            $adminToken = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? ($_GET['token'] ?? '');
-            if ($adminToken !== (admin_get_token($mysqli))) {
-                echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-                exit;
-            }
-            $filter = $_GET['status'] ?? 'review';
-            if ($filter === 'review' || !in_array($filter, ['pending', 'flagged', 'approved', 'rejected'])) {
-                $where = "cp.status IN ('pending','flagged')";
-            } else {
-                $where = "cp.status = '" . $filter . "'";
-            }
-            $res = $mysqli->query(
-                "SELECT cp.id, cp.crop_id, c.name AS crop_name, cp.district_id, d.name AS district_name,
-                        cp.market_name, cp.price_per_kg, cp.price_per_bag, cp.unit, cp.submitted_by,
-                        cp.channel, cp.status, cp.is_member, cp.flag_reason, cp.created_at
-                 FROM crowdsourced_prices cp
-                 JOIN crops c ON cp.crop_id = c.id
-                 LEFT JOIN districts d ON cp.district_id = d.id
-                 WHERE $where
-                 ORDER BY cp.created_at ASC LIMIT 200"
-            );
-            $rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-            foreach ($rows as &$row) {
-                $refs = cp_reference_prices($mysqli, (int)$row['crop_id'], $row['district_id'] !== null ? (int)$row['district_id'] : null);
-                $row['reference_median']  = count($refs) ? round(cp_median($refs)) : null;
-                $row['reference_samples'] = count($refs);
-            }
-            unset($row);
-            echo json_encode(['success' => true, 'data' => $rows, 'count' => count($rows), 'timestamp' => date('c')]);
-            break;
-
-        case 'price_review':
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('POST method required');
-            $adminToken = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
-            if ($adminToken !== (admin_get_token($mysqli))) {
-                echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-                exit;
-            }
-            $body     = json_decode(file_get_contents('php://input'), true) ?? [];
-            $priceId  = (int)($body['price_id'] ?? 0);
-            $decision = $body['decision'] ?? '';
-            $reviewer = mb_substr(trim($body['reviewer'] ?? 'admin'), 0, 50);
-            $map = ['approve' => 'approved', 'reject' => 'rejected', 'flag' => 'flagged'];
-            if (!$priceId || !isset($map[$decision])) {
-                throw new Exception('price_id and decision (approve/reject/flag) are required');
-            }
-            $newStatus = $map[$decision];
-            $note = $decision === 'reject' ? mb_substr(trim($body['notes'] ?? ''), 0, 255) : null;
-            $stmt = $mysqli->prepare("UPDATE crowdsourced_prices SET status=?, flag_reason=?, reviewed_by=?, reviewed_at=NOW() WHERE id=?");
-            $stmt->bind_param('sssi', $newStatus, $note, $reviewer, $priceId);
-            $stmt->execute();
-            echo json_encode(['success' => true, 'message' => "Price {$newStatus}", 'affected' => $mysqli->affected_rows, 'timestamp' => date('c')]);
-            break;
-
-        case 'fews_prices_refresh':
-            $adminToken = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? $_GET['token'] ?? '';
-            if ($adminToken !== (admin_get_token($mysqli))) {
-                throw new Exception('Unauthorized.');
-            }
-            $cacheFile = __DIR__ . '/config/fews_prices_cache.json';
-            if (file_exists($cacheFile)) unlink($cacheFile);
-            $result = fews_get_prices($mysqli);
-            echo json_encode([
-                'success'       => true,
-                'rows'          => count($result['data'] ?? []),
-                'source_url'    => $result['source_url'] ?? null,
-                'error'         => $result['error'] ?? null,
-                'fetched_at'    => $result['fetched_at'] ?? null,
-            ]);
-            break;
-
-        // ── TEST: Send a test email via SMTP ────────────────────────
-        case 'test_email':
-            $adminToken    = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? ($_GET['token'] ?? '');
-            $envAdminToken = admin_get_token($mysqli);
-            if ($adminToken !== $envAdminToken) {
-                throw new Exception('Unauthorised — provide valid admin token');
-            }
-            $toAddr = trim($_GET['to'] ?? '');
-            if (!$toAddr || !filter_var($toAddr, FILTER_VALIDATE_EMAIL)) {
-                throw new Exception('Provide a valid "to" email address: ?to=you@example.com');
-            }
-            $testSubject = 'AgroBusiness Malawi — SMTP Test';
-            $testBody    = "Hello,\n\nThis is a test email from AgroBusiness Malawi to confirm that SMTP is configured correctly.\n\n"
-                         . "Sent: " . date('Y-m-d H:i:s T') . "\n\nAgroBusiness Malawi Team";
-            $sent = send_smtp_email($toAddr, $testSubject, $testBody);
-            echo json_encode([
-                'success'   => $sent,
-                'message'   => $sent ? "Test email sent to {$toAddr}" : 'SMTP send failed — check server logs',
-                'to'        => $toAddr,
-                'smtp_host' => $_ENV['Outgoing Server'] ?? '(not set)',
-                'smtp_port' => $_ENV['SMTP Port'] ?? '(not set)',
-                'smtp_user' => $_ENV['Username'] ?? '(not set)',
-                'timestamp' => date('c'),
-            ]);
-            break;
-
         default:
-            throw new Exception('Invalid action specified. Available actions: test, districts, crops, crop_prices, dual_crop_prices, markets, submit_price, price_review_list, price_review, fews_prices_refresh, market_insights, sellers, buyers, pest_control, farming_tips, basic_info, submit_application, check_application, admin_applications, admin_review, test_email');
+            throw new Exception('Invalid action specified. Available actions: test, districts, crops, crop_prices, dual_crop_prices, markets, submit_price, market_insights, sellers, buyers, pest_control, farming_tips, basic_info, submit_application, check_application');
     }
 } catch (Throwable $e) {
     ob_clean();
@@ -1475,132 +1193,6 @@ function cp_apply_overrides(mysqli $db, array $fews, ?int $crop_id): array
     return $fews;
 }
 
-// ─── AGROBIZ REFERENCE RATE FETCH + FILE CACHE ──────────────────────────────
-// (Rates are sourced upstream then presented under the AgroBiz brand.)
-
-function fews_get_prices($db)
-{
-    $cacheFile = __DIR__ . '/config/fews_prices_cache.json';
-    $ttl = 6 * 3600;
-
-    if (file_exists($cacheFile)) {
-        $cached = json_decode(file_get_contents($cacheFile), true);
-        if ($cached && isset($cached['data']) && (time() - (int)($cached['fetched_at'] ?? 0)) < $ttl) {
-            return $cached;
-        }
-    }
-
-    $fresh = fews_fetch_prices($db);
-    $fresh['fetched_at'] = time();
-    @file_put_contents($cacheFile, json_encode($fresh), LOCK_EX);
-    return $fresh;
-}
-
-function fews_fetch_prices($db)
-{
-    $sourceUrl = 'https://fdw.fews.net/api/marketpricefacts/?format=json&country_code=MW&ordering=-period_date&page_size=250';
-    $ctx = stream_context_create(['http' => [
-        'timeout' => 20,
-        'user_agent' => 'AgroBusiness-Malawi/1.0',
-    ]]);
-    $raw = @file_get_contents($sourceUrl, false, $ctx);
-    if (!$raw) {
-        return ['data' => [], 'source_url' => $sourceUrl, 'error' => 'Reference rates unavailable. Showing community prices only.'];
-    }
-
-    $json = json_decode($raw, true);
-    if (!is_array($json) || !isset($json['results']) || !is_array($json['results'])) {
-        return ['data' => [], 'source_url' => $sourceUrl, 'error' => 'Reference rate source returned an unexpected response.'];
-    }
-
-    $cropMap = [];
-    $r = $db->query("SELECT id, name FROM crops");
-    while ($row = $r->fetch_assoc()) {
-        $cropMap[] = ['id' => (int)$row['id'], 'name' => $row['name'], 'match' => strtolower($row['name'])];
-    }
-
-    $aliases = [
-        'maize' => ['maize', 'maize grain'],
-        'rice' => ['rice', 'rice milled'],
-        'beans' => ['beans', 'bean', 'cowpeas', 'cowpea'],
-        'groundnuts' => ['groundnut', 'groundnuts', 'peanut'],
-        'cassava' => ['cassava'],
-        'sorghum' => ['sorghum'],
-        'millet' => ['millet'],
-        'soybeans' => ['soybean', 'soybeans', 'soya'],
-        'tobacco' => ['tobacco'],
-    ];
-
-    $districtMap = fews_district_map($db);
-
-    $rows = [];
-    $seen = [];
-    foreach ($json['results'] as $item) {
-        if (($item['country_code'] ?? '') !== 'MW' || !isset($item['value'])) continue;
-
-        $product = strtolower($item['product'] ?? '');
-        $matched = null;
-        foreach ($cropMap as $crop) {
-            $terms = $aliases[$crop['match']] ?? [$crop['match']];
-            foreach ($terms as $term) {
-                if (strpos($product, $term) !== false) {
-                    $matched = $crop;
-                    break 2;
-                }
-            }
-        }
-        if (!$matched) continue;
-
-        $key = $matched['id'] . '|' . ($item['market'] ?? '') . '|' . ($item['period_date'] ?? '');
-        if (isset($seen[$key])) continue;
-        $seen[$key] = true;
-
-        $marketName = $item['market'] ?? '';
-        $district = fews_match_district($marketName, $districtMap);
-
-        $rows[] = [
-            'crop_id' => $matched['id'],
-            'crop_name' => $matched['name'],
-            'district_id' => $district['id'],
-            'district_name' => $district['name'] ?: ($item['admin_1'] ?? ''),
-            'market_name' => $marketName,
-            'price' => (float)$item['value'],
-            'price_type' => $item['price_type'] ?? 'Retail',
-            'unit' => $item['unit'] ?? 'kg',
-            'currency' => $item['currency'] ?? 'MWK',
-            'price_date' => $item['period_date'] ?? null,
-            // Origin is presented under the platform's own brand, not the upstream source.
-            'source_organization' => 'AgroBiz Reference',
-        ];
-    }
-
-    return [
-        'data' => $rows,
-        'source_url' => $sourceUrl,
-        'error' => empty($rows) ? 'No reference rates matched local crops.' : null,
-    ];
-}
-
-function fews_district_map($db)
-{
-    $map = [];
-    $r = $db->query("SELECT id, name FROM districts");
-    while ($row = $r->fetch_assoc()) {
-        $map[] = ['id' => (int)$row['id'], 'name' => $row['name'], 'match' => strtolower($row['name'])];
-    }
-    return $map;
-}
-
-function fews_match_district($marketName, $districtMap)
-{
-    $market = strtolower($marketName);
-    foreach ($districtMap as $district) {
-        if (strpos($market, $district['match']) !== false) {
-            return ['id' => $district['id'], 'name' => $district['name']];
-        }
-    }
-    return ['id' => null, 'name' => ''];
-}
 
 // Close database connection
 if (isset($mysqli)) {

@@ -1,4 +1,17 @@
 // AgroBusiness Malawi - Revolutionary Final Version (COMPLETE)
+
+// HTML-escape helper for interpolating DB/API-sourced values into markup.
+// Escapes & FIRST to avoid double-encoding, then the remaining HTML-significant
+// chars. Handles both text and quoted-attribute contexts (covers " and ').
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 class AgroBusinessRevolution {
     constructor() {
         this.apiBase = 'api.php';
@@ -1649,7 +1662,7 @@ class AgroBusinessRevolution {
             const render = () => {
                 const t = (searchEl.value || '').trim().toLowerCase();
                 matches = list.filter(d => (region === 'all' || d.region === region) && (!t || d.name.toLowerCase().includes(t)));
-                grid.innerHTML = matches.length ? matches.map(card).join('') : `<p class="picker-empty">No districts match “${t}”.</p>`;
+                grid.innerHTML = matches.length ? matches.map(card).join('') : `<p class="picker-empty">No districts match “${escapeHtml(t)}”.</p>`;
                 countEl.textContent = `${matches.length} district${matches.length === 1 ? '' : 's'}`;
             };
 
@@ -1702,8 +1715,8 @@ class AgroBusinessRevolution {
                 return `
                     <div class="overview-item" style="animation-delay: ${index * 0.05}s" onclick="app.selectCropFromOverview(${crop.id})">
                         <span class="overview-badge emoji">${this.getCropIcon(crop.name)}</span>
-                        <span class="overview-title">${crop.name}</span>
-                        <span class="overview-chip">${category}</span>
+                        <span class="overview-title">${escapeHtml(crop.name)}</span>
+                        <span class="overview-chip">${escapeHtml(category)}</span>
                     </div>
                 `;
             }).join('');
@@ -1915,8 +1928,8 @@ class AgroBusinessRevolution {
             list.innerHTML = crops.map((crop, index) => {
                 const category = this.getCropCategory(crop.name);
                 return `
-                    <button class="crop-item" data-id="${crop.id}" data-name="${crop.name}" data-category="${category}" type="button">
-                        ${this.getCropIcon(crop.name)} <strong>${crop.name}</strong> — ${this.texts[this.currentLang][category] ?? category}
+                    <button class="crop-item" data-id="${escapeHtml(crop.id)}" data-name="${escapeHtml(crop.name)}" data-category="${escapeHtml(category)}" type="button">
+                        ${this.getCropIcon(crop.name)} <strong>${escapeHtml(crop.name)}</strong> — ${this.texts[this.currentLang][category] ?? category}
                     </button>
                 `;
             }).join('');
@@ -2770,7 +2783,7 @@ class AgroBusinessRevolution {
             if (weatherData) {
                 const html = `
                     <div style="margin-bottom: 2rem;">
-                        <h2 style="margin-bottom: 1rem; color: var(--primary);">🌤️ ${this.texts[this.currentLang].weather} - ${weatherData.district_name}</h2>
+                        <h2 style="margin-bottom: 1rem; color: var(--primary);">🌤️ ${this.texts[this.currentLang].weather} - ${escapeHtml(weatherData.district_name)}</h2>
                         <p style="color: var(--text-secondary);">7-day weather forecast with farming insights</p>
                     </div>
 
@@ -2852,7 +2865,7 @@ class AgroBusinessRevolution {
         const districtName = district ? district.name : `District ${districtId}`;
 
         const html = `
-            <h2 style="margin-bottom: 2rem; color: var(--primary);">🌤️ ${this.texts[this.currentLang].weather} - ${districtName}</h2>
+            <h2 style="margin-bottom: 2rem; color: var(--primary);">🌤️ ${this.texts[this.currentLang].weather} - ${escapeHtml(districtName)}</h2>
             <div class="weather-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
                 ${['Today', 'Tomorrow', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'].map((day, index) => `
                     <div class="weather-day" style="background: var(--white); border: 1px solid var(--gray-200); border-radius: var(--radius-xl); padding: 1.5rem; text-align: center; animation: serviceReveal 0.4s ease ${index * 0.1}s both;">
@@ -2902,11 +2915,11 @@ class AgroBusinessRevolution {
                             <div class="card-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
                                 <h3 style="display: flex; align-items: center; gap: 0.75rem; color: var(--text-primary);">
                                     <span style="font-size: 2rem;">📍</span>
-                                    ${insight.district_name} Market Update
+                                    ${escapeHtml(insight.district_name)} Market Update
                                 </h3>
                                 <span class="update-badge" style="background: var(--primary-glow); color: var(--primary); padding: 0.25rem 0.75rem; border-radius: var(--radius-md); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Latest</span>
                             </div>
-                            <p style="color: var(--text-secondary); line-height: 1.7; font-size: 1rem;">${insight[`insight_${this.currentLang}`] || insight.insight_en}</p>
+                            <p style="color: var(--text-secondary); line-height: 1.7; font-size: 1rem;">${escapeHtml(insight[`insight_${this.currentLang}`] || insight.insight_en)}</p>
                         </div>
                     `).join('')}
                 </div>
@@ -2944,13 +2957,13 @@ class AgroBusinessRevolution {
         const chipHtml = crops.length ? `
             <div class="trade-chips" role="group" aria-label="Filter by crop">
                 <button class="trade-chip active" data-crop-filter="">All</button>
-                ${crops.map(c => `<button class="trade-chip" data-crop-filter="${c.toLowerCase()}">${c}</button>`).join('')}
+                ${crops.map(c => `<button class="trade-chip" data-crop-filter="${escapeHtml(c.toLowerCase())}">${escapeHtml(c)}</button>`).join('')}
             </div>` : '';
 
         return `
             <div class="trade-hero trade-hero-${type}">
                 <div class="trade-hero-inner">
-                    <span class="trade-kicker">${districtName}</span>
+                    <span class="trade-kicker">${escapeHtml(districtName)}</span>
                     <h2>${title}</h2>
                     <p>${count} ${isSeller ? 'seller' : 'buyer'}${count === 1 ? '' : 's'} found — tap to call directly</p>
                 </div>
@@ -3064,30 +3077,30 @@ class AgroBusinessRevolution {
                     ${sellers.map(seller => {
                 const cropStr = seller.crops_display || '';
                 const cropTags = cropStr
-                    ? cropStr.split(', ').map(c => `<span class="trade-crop-tag">${c.trim()}</span>`).join('')
+                    ? cropStr.split(', ').map(c => `<span class="trade-crop-tag">${escapeHtml(c.trim())}</span>`).join('')
                     : '<span class="trade-crop-tag muted">No crops listed</span>';
                 const ratingNum = parseFloat(seller.rating);
                 const ratingHtml = ratingNum ? this.renderStars(ratingNum) : '<span class="trade-new-badge">New</span>';
                 const searchStr = `${seller.name} ${seller.district_name} ${seller.phone_number || ''} ${seller.email || ''} ${seller.address || ''} ${cropStr}`.toLowerCase();
                 return `
-                            <article class="trade-card seller-card" data-contact-card data-search="${searchStr}" data-crops="${cropStr.toLowerCase()}">
+                            <article class="trade-card seller-card" data-contact-card data-search="${escapeHtml(searchStr)}" data-crops="${escapeHtml(cropStr.toLowerCase())}">
                                 <div class="trade-card-accent"></div>
                                 <div>
                                     <div class="trade-card-body">
                                         <div class="trade-card-header">
                                             <div>
-                                                <h3 class="trade-card-name">${seller.name}</h3>
-                                                <p class="trade-location">${seller.district_name}${seller.address ? ` · ${seller.address}` : ''}</p>
+                                                <h3 class="trade-card-name">${escapeHtml(seller.name)}</h3>
+                                                <p class="trade-location">${escapeHtml(seller.district_name)}${seller.address ? ` · ${escapeHtml(seller.address)}` : ''}</p>
                                             </div>
                                             <div class="trade-rating">${ratingHtml}</div>
                                         </div>
                                         <div class="trade-crop-tags">${cropTags}</div>
                                     </div>
                                     <div class="trade-actions">
-                                        <a href="tel:${seller.phone_number}" class="trade-call">
-                                            <span class="material-symbols-rounded">call</span>${seller.phone_number}
+                                        <a href="tel:${escapeHtml(seller.phone_number)}" class="trade-call">
+                                            <span class="material-symbols-rounded">call</span>${escapeHtml(seller.phone_number)}
                                         </a>
-                                        ${seller.email ? `<a href="mailto:${seller.email}" class="trade-email"><span class="material-symbols-rounded">mail</span>Email</a>` : ''}
+                                        ${seller.email ? `<a href="mailto:${escapeHtml(seller.email)}" class="trade-email"><span class="material-symbols-rounded">mail</span>Email</a>` : ''}
                                     </div>
                                 </div>
                             </article>`;
@@ -3120,28 +3133,28 @@ class AgroBusinessRevolution {
                     ${buyers.map(buyer => {
                 const cropStr = buyer.crops_display || '';
                 const cropTags = cropStr
-                    ? cropStr.split(', ').map(c => `<span class="trade-crop-tag">${c.trim()}</span>`).join('')
+                    ? cropStr.split(', ').map(c => `<span class="trade-crop-tag">${escapeHtml(c.trim())}</span>`).join('')
                     : '<span class="trade-crop-tag muted">No crops listed</span>';
                 const searchStr = `${buyer.name} ${buyer.district_name} ${buyer.phone_number || ''} ${buyer.email || ''} ${buyer.address || ''} ${cropStr}`.toLowerCase();
                 return `
-                            <article class="trade-card buyer-card" data-contact-card data-search="${searchStr}" data-crops="${cropStr.toLowerCase()}">
+                            <article class="trade-card buyer-card" data-contact-card data-search="${escapeHtml(searchStr)}" data-crops="${escapeHtml(cropStr.toLowerCase())}">
                                 <div class="trade-card-accent"></div>
                                 <div>
                                     <div class="trade-card-body">
                                         <div class="trade-card-header">
                                             <div>
-                                                <h3 class="trade-card-name">${buyer.name}</h3>
-                                                <p class="trade-location">${buyer.district_name}${buyer.address ? ` · ${buyer.address}` : ''}</p>
+                                                <h3 class="trade-card-name">${escapeHtml(buyer.name)}</h3>
+                                                <p class="trade-location">${escapeHtml(buyer.district_name)}${buyer.address ? ` · ${escapeHtml(buyer.address)}` : ''}</p>
                                             </div>
                                             <div class="trade-rating"><span class="trade-new-badge">Buying</span></div>
                                         </div>
                                         <div class="trade-crop-tags">${cropTags}</div>
                                     </div>
                                     <div class="trade-actions">
-                                        <a href="tel:${buyer.phone_number}" class="trade-call">
-                                            <span class="material-symbols-rounded">call</span>${buyer.phone_number}
+                                        <a href="tel:${escapeHtml(buyer.phone_number)}" class="trade-call">
+                                            <span class="material-symbols-rounded">call</span>${escapeHtml(buyer.phone_number)}
                                         </a>
-                                        ${buyer.email ? `<a href="mailto:${buyer.email}" class="trade-email"><span class="material-symbols-rounded">mail</span>Email</a>` : ''}
+                                        ${buyer.email ? `<a href="mailto:${escapeHtml(buyer.email)}" class="trade-email"><span class="material-symbols-rounded">mail</span>Email</a>` : ''}
                                     </div>
                                 </div>
                             </article>`;
@@ -3182,11 +3195,11 @@ class AgroBusinessRevolution {
                             <div class="card-header">
                                 <h3 style="display: flex; align-items: center; gap: 0.75rem; color: var(--text-primary);">
                                     <span style="font-size: 2rem;">🐛</span>
-                                    ${tip.crop_name} - ${tip.district_name}
+                                    ${escapeHtml(tip.crop_name)} - ${escapeHtml(tip.district_name)}
                                 </h3>
                                 <span class="tip-badge" style="background: rgba(245, 158, 11, 0.1); color: #d97706;">${t.prevention_label}</span>
                             </div>
-                            <p class="card-text">${tip[`tip_${this.currentLang}`] || tip.tip_en}</p>
+                            <p class="card-text">${escapeHtml(tip[`tip_${this.currentLang}`] || tip.tip_en)}</p>
                         </div>
                     `).join('')}
                 </div>
@@ -3228,19 +3241,19 @@ class AgroBusinessRevolution {
                 <div class="tips-grid">
                     ${tips.map((tip, index) => {
                         const badgeLabel = this.currentLang === 'ci'
-                            ? (this.practiceTypeMap[tip.practice_type] || tip.practice_type)
-                            : tip.practice_type;
+                            ? (this.practiceTypeMap[tip.practice_type] || escapeHtml(tip.practice_type))
+                            : escapeHtml(tip.practice_type);
                         return `
                         <div class="tip-card" style="animation: serviceReveal 0.4s ease ${index * 0.1}s both;">
                             <div class="card-accent-bar" style="background: var(--gradient-primary);"></div>
                             <div class="card-header">
                                 <h3 style="display: flex; align-items: center; gap: 0.75rem; color: var(--text-primary);">
                                     <span style="font-size: 2rem;">🌾</span>
-                                    ${tip.crop_name}
+                                    ${escapeHtml(tip.crop_name)}
                                 </h3>
                                 <span class="practice-badge" style="background: var(--primary-glow); color: var(--primary);">${badgeLabel}</span>
                             </div>
-                            <p class="card-text">${tip[`practice_${this.currentLang}`] || tip.practice_en}</p>
+                            <p class="card-text">${escapeHtml(tip[`practice_${this.currentLang}`] || tip.practice_en)}</p>
                         </div>`;
                     }).join('')}
                 </div>
@@ -3286,11 +3299,11 @@ class AgroBusinessRevolution {
                             <div class="card-header">
                                 <h3 style="display: flex; align-items: center; gap: 0.75rem; color: var(--text-primary);">
                                     <span style="font-size: 2rem;">📚</span>
-                                    ${item.topic}
+                                    ${escapeHtml(item.topic)}
                                 </h3>
                                 <span class="info-badge" style="background: rgba(139, 115, 85, 0.1); color: var(--accent);">${t.essential_label}</span>
                             </div>
-                            <p class="card-text">${item[`info_${this.currentLang}`] || item.info_en}</p>
+                            <p class="card-text">${escapeHtml(item[`info_${this.currentLang}`] || item.info_en)}</p>
                         </div>
                     `).join('')}
                 </div>
@@ -3495,7 +3508,7 @@ AgroBusinessRevolution.prototype._regLoadCrops = function () {
             data.data.forEach(c => {
                 const label = document.createElement('label');
                 label.className = 'reg-crop-checkbox';
-                label.innerHTML = `<input type="checkbox" value="${c.id}" data-name="${c.name}"> ${c.name}`;
+                label.innerHTML = `<input type="checkbox" value="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}"> ${escapeHtml(c.name)}`;
                 grid.appendChild(label);
             });
         })
@@ -3757,11 +3770,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     result.style.display = '';
                     result.innerHTML = `
                         <div style="background:#242424;border-radius:10px;padding:1rem;font-size:.9rem;line-height:1.8;">
-                            <strong>${d.full_name}</strong> &nbsp; <span class="status-badge ${statusClass}">${d.status.toUpperCase()}</span><br>
-                            <strong>Type:</strong> ${d.user_type}<br>
-                            <strong>District:</strong> ${d.district_name || '—'}<br>
-                            <strong>Applied:</strong> ${new Date(d.created_at).toLocaleDateString()}<br>
-                            ${d.status === 'denied' && d.denial_reason ? `<strong>Reason:</strong> ${d.denial_reason}<br>` : ''}
+                            <strong>${escapeHtml(d.full_name)}</strong> &nbsp; <span class="status-badge ${escapeHtml(statusClass)}">${escapeHtml(String(d.status).toUpperCase())}</span><br>
+                            <strong>Type:</strong> ${escapeHtml(d.user_type)}<br>
+                            <strong>District:</strong> ${escapeHtml(d.district_name || '—')}<br>
+                            <strong>Applied:</strong> ${escapeHtml(new Date(d.created_at).toLocaleDateString())}<br>
+                            ${d.status === 'denied' && d.denial_reason ? `<strong>Reason:</strong> ${escapeHtml(d.denial_reason)}<br>` : ''}
                             ${d.status === 'approved' ? '<br>✅ You are now a verified member of AgroBusiness Malawi!' : ''}
                             ${d.status === 'pending' ? '<br>⏳ Your application is under review. We will notify you soon.' : ''}
                         </div>
@@ -3785,206 +3798,3 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 // ─── END REGISTRATION MODULE ──────────────────────────────────────────────────
-
-// ─── ADMIN PANEL MODULE ───────────────────────────────────────────────────────
-
-AgroBusinessRevolution.prototype.openAdminPanel = function () {
-    const modal = document.getElementById('admin-modal');
-    if (!modal) return;
-    const savedToken = sessionStorage.getItem('agro_admin_token');
-    if (savedToken) {
-        this._adminToken = savedToken;
-        this._adminShowApps('pending');
-    } else {
-        document.getElementById('admin-login-screen').style.display = '';
-        document.getElementById('admin-apps-screen').style.display = 'none';
-        document.getElementById('admin-review-screen').style.display = 'none';
-    }
-    this.openModal(modal);
-};
-
-AgroBusinessRevolution.prototype._adminBindEvents = function () {
-    const loginBtn = document.getElementById('admin-login-btn');
-    if (loginBtn && !loginBtn._adminBound) {
-        loginBtn._adminBound = true;
-        loginBtn.addEventListener('click', () => this._adminDoLogin());
-        document.getElementById('admin-token-input').addEventListener('keydown', e => {
-            if (e.key === 'Enter') this._adminDoLogin();
-        });
-    }
-
-    const closeBtn = document.getElementById('admin-modal-close');
-    if (closeBtn && !closeBtn._adminBound) {
-        closeBtn._adminBound = true;
-        closeBtn.addEventListener('click', () => {
-            document.getElementById('admin-modal').classList.remove('active');
-            document.body.style.overflow = '';
-        });
-    }
-
-    const backBtn = document.getElementById('admin-back-btn');
-    if (backBtn && !backBtn._adminBound) {
-        backBtn._adminBound = true;
-        backBtn.addEventListener('click', () => this._adminShowApps(this._adminCurrentTab || 'pending'));
-    }
-
-    document.querySelectorAll('#admin-tabs .admin-tab').forEach(tab => {
-        if (!tab._adminBound) {
-            tab._adminBound = true;
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('#admin-tabs .admin-tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                this._adminShowApps(tab.dataset.status);
-            });
-        }
-    });
-};
-
-AgroBusinessRevolution.prototype._adminDoLogin = function () {
-    const token = (document.getElementById('admin-token-input').value || '').trim();
-    const errEl = document.getElementById('admin-login-error');
-    if (!token) { errEl.textContent = 'Please enter the admin token.'; errEl.style.display = ''; return; }
-    errEl.style.display = 'none';
-    this._adminToken = token;
-    sessionStorage.setItem('agro_admin_token', token);
-    this._adminShowApps('pending');
-};
-
-AgroBusinessRevolution.prototype._adminShowApps = function (status) {
-    this._adminCurrentTab = status;
-    document.getElementById('admin-login-screen').style.display = 'none';
-    document.getElementById('admin-review-screen').style.display = 'none';
-    document.getElementById('admin-apps-screen').style.display = '';
-    const list = document.getElementById('admin-apps-list');
-    list.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
-
-    const base = (window.APP_CONFIG && window.APP_CONFIG.apiBase) ? window.APP_CONFIG.apiBase : 'api.php';
-    fetch(`${base}?action=admin_applications&status=${status}&token=${encodeURIComponent(this._adminToken)}`)
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) {
-                if (data.error === 'Unauthorized') {
-                    sessionStorage.removeItem('agro_admin_token');
-                    document.getElementById('admin-login-screen').style.display = '';
-                    document.getElementById('admin-apps-screen').style.display = 'none';
-                    const errEl = document.getElementById('admin-login-error');
-                    errEl.textContent = 'Invalid token. Please try again.';
-                    errEl.style.display = '';
-                    return;
-                }
-                list.innerHTML = `<p style="color:#dc2626;">Error: ${data.error || 'Failed to load'}</p>`;
-                return;
-            }
-            this._adminRenderList(data.data || []);
-        })
-        .catch(() => { list.innerHTML = '<p style="color:#dc2626;">Network error. Check connection.</p>'; });
-};
-
-AgroBusinessRevolution.prototype._adminRenderList = function (apps) {
-    const list = document.getElementById('admin-apps-list');
-    if (!apps.length) {
-        list.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:2rem 0;">No applications in this category.</p>';
-        return;
-    }
-    const statusBadge = s => {
-        const map = { pending: '#f59e0b', approved: '#16a34a', denied: '#dc2626' };
-        return `<span style="background:${map[s]||'#6b7280'};color:#fff;border-radius:999px;padding:2px 10px;font-size:0.75rem;font-weight:600;">${s.toUpperCase()}</span>`;
-    };
-    list.innerHTML = apps.map(a => `
-        <div class="admin-app-card" data-id="${a.id}">
-            <div class="admin-app-card-header">
-                <span class="admin-app-ref">${a.application_ref}</span>
-                ${statusBadge(a.status)}
-            </div>
-            <div class="admin-app-card-body">
-                <strong>${a.full_name}</strong> &mdash; <span style="text-transform:capitalize;">${a.user_type}</span><br>
-                <span style="color:var(--text-muted);font-size:0.85rem;">${a.district_name || '—'} &bull; ${a.phone_number}</span><br>
-                <span style="color:var(--text-muted);font-size:0.8rem;">${new Date(a.created_at).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})}</span>
-            </div>
-            ${a.status === 'pending' ? `<button class="admin-review-btn btn-primary" data-id="${a.id}" style="width:100%;margin-top:0.5rem;">Review</button>` : ''}
-        </div>
-    `).join('');
-
-    list.querySelectorAll('.admin-review-btn').forEach(btn => {
-        btn.addEventListener('click', () => this._adminOpenReview(parseInt(btn.dataset.id), apps));
-    });
-};
-
-AgroBusinessRevolution.prototype._adminOpenReview = function (id, apps) {
-    const app = apps.find(a => a.id === id);
-    if (!app) return;
-    this._adminCurrentAppId = id;
-    document.getElementById('admin-apps-screen').style.display = 'none';
-    document.getElementById('admin-review-screen').style.display = '';
-    document.getElementById('admin-notes-input').value = '';
-    document.getElementById('admin-review-msg').style.display = 'none';
-
-    document.getElementById('admin-review-detail').innerHTML = `
-        <div class="admin-detail-card">
-            <div class="admin-detail-row"><span>Reference</span><strong>${app.application_ref}</strong></div>
-            <div class="admin-detail-row"><span>Name</span><strong>${app.full_name}</strong></div>
-            <div class="admin-detail-row"><span>Type</span><strong style="text-transform:capitalize;">${app.user_type}</strong></div>
-            <div class="admin-detail-row"><span>Phone</span><strong>${app.phone_number}</strong></div>
-            <div class="admin-detail-row"><span>Email</span><strong>${app.email || '—'}</strong></div>
-            <div class="admin-detail-row"><span>District</span><strong>${app.district_name || '—'}</strong></div>
-            <div class="admin-detail-row"><span>Channel</span><strong>${app.channel}</strong></div>
-            <div class="admin-detail-row"><span>Applied</span><strong>${new Date(app.created_at).toLocaleString('en-GB')}</strong></div>
-        </div>
-    `;
-
-    const approveBtn = document.getElementById('admin-approve-btn');
-    const denyBtn = document.getElementById('admin-deny-btn');
-    // Remove old listeners by replacing elements
-    const newApprove = approveBtn.cloneNode(true);
-    const newDeny = denyBtn.cloneNode(true);
-    approveBtn.parentNode.replaceChild(newApprove, approveBtn);
-    denyBtn.parentNode.replaceChild(newDeny, denyBtn);
-
-    newApprove.addEventListener('click', () => this._adminSubmitReview('approve'));
-    newDeny.addEventListener('click', () => this._adminSubmitReview('deny'));
-};
-
-AgroBusinessRevolution.prototype._adminSubmitReview = function (action) {
-    const notes = (document.getElementById('admin-notes-input').value || '').trim();
-    const msgEl = document.getElementById('admin-review-msg');
-    const base = (window.APP_CONFIG && window.APP_CONFIG.apiBase) ? window.APP_CONFIG.apiBase : 'api.php';
-
-    msgEl.style.color = '#6b7280';
-    msgEl.textContent = 'Submitting…';
-    msgEl.style.display = '';
-
-    fetch(base + '?action=admin_review', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Admin-Token': this._adminToken
-        },
-        body: JSON.stringify({ application_id: this._adminCurrentAppId, action, notes })
-    })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                msgEl.style.color = '#166d42';
-                const label = action === 'approve' ? 'Approved' : 'Denied';
-                msgEl.textContent = `✓ ${label} successfully. Email sent to applicant.`;
-                setTimeout(() => this._adminShowApps('pending'), 1800);
-            } else {
-                msgEl.style.color = '#991b1b';
-                msgEl.textContent = 'Error: ' + (data.error || 'Failed to submit');
-            }
-        })
-        .catch(() => { msgEl.style.color = '#991b1b'; msgEl.textContent = 'Network error.'; });
-};
-
-// Bind admin panel events after DOM ready
-document.addEventListener('DOMContentLoaded', function () {
-    if (window.app) window.app._adminBindEvents();
-    else setTimeout(() => window.app && window.app._adminBindEvents(), 500);
-
-    // Auto-open admin panel if URL contains ?admin
-    if (new URLSearchParams(window.location.search).has('admin')) {
-        setTimeout(() => window.app && window.app.openAdminPanel(), 600);
-    }
-});
-
-// ─── END ADMIN PANEL MODULE ───────────────────────────────────────────────────
