@@ -17,120 +17,44 @@
     text-align: center;
 }
 
-.agro-footer-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: .7rem;
-    text-align: left;
-    margin-bottom: 1.15rem;
+.agro-footer-brand { display:inline-flex; align-items:center; gap:.7rem; text-align:left; margin-bottom:1.15rem; }
+.agro-footer-brand strong,.agro-footer-brand span { display:block; }
+.agro-footer-brand strong { font-family:'DM Serif Display',Georgia,serif; font-size:1.05rem; font-weight:400; color:#40382f; }
+.agro-footer-brand span:last-child { margin-top:.15rem; color:#85796b; font-size:.72rem; }
+.agro-footer-mark { display:grid!important; place-items:center; width:34px; height:34px; border:1px solid rgba(79,71,60,.35); border-radius:50%; color:#7d684f!important; font-size:.75rem; transform:rotate(-8deg); }
+.agro-footer-links { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:.35rem .95rem; margin:0 auto 1rem; }
+.agro-footer-links a { position:relative; z-index:3; color:#62584c; font-size:.72rem; text-decoration:none; transition:color .2s ease; }
+.agro-footer-links a:hover,.agro-footer-links a:focus-visible { color:#8b7355; text-decoration:underline; text-underline-offset:3px; }
+.agro-footer-copy { margin:0; color:#978b7d; font-size:.65rem; letter-spacing:.025em; }
+.agro-footer-art { position:absolute; z-index:1; bottom:-4rem; width:min(24vw,270px); height:500px; opacity:.12; pointer-events:none; }
+.agro-footer-art-left { left:-1.5rem; transform:rotate(-2deg); }
+.agro-footer-art-right { right:-1.5rem; transform:rotate(2deg) scaleX(-1); }
+.agro-footer-art svg { width:100%; height:100%; }
+.agro-pencil-line { fill:none; stroke:#5b5043; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+.agro-pencil-line .fine { stroke-width:1.15; }
+.agro-pencil-line .contour { stroke-width:1; stroke-dasharray:5 7; opacity:.8; }
+
+/* The homepage already has a footer in index.php. Give it the same visual system
+   so the public pages share one footer language without duplicating markup. */
+.dash-footer { position:relative; overflow:hidden; margin-top:3.5rem; border-top:1px solid rgba(139,115,85,.22); background:#f1ece2!important; color:#51483d; }
+.dash-footer::before,.dash-footer::after { content:''; position:absolute; z-index:1; top:0; bottom:0; width:min(22vw,250px); opacity:.11; pointer-events:none; background-repeat:no-repeat; background-position:center bottom; background-size:contain; }
+.dash-footer::before { left:-1rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 500'%3E%3Cg fill='none' stroke='%235b5043' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath stroke-width='2.4' d='M78 490C92 390 88 286 78 184C72 120 82 58 112 8'/%3E%3Cpath stroke-width='2' d='M85 390C42 350 22 300 24 250C59 265 83 297 88 345M81 315C119 279 146 238 158 188C123 197 96 222 83 267M80 235C47 198 37 159 41 119C70 135 88 163 89 202M84 166C113 133 130 96 130 58C103 72 87 100 83 131'/%3E%3Cpath stroke-width='1' stroke-dasharray='5 7' d='M5 447C60 424 120 433 178 407C220 388 246 390 258 384M0 474C57 450 117 460 175 434C218 414 244 417 260 410'/%3E%3C/g%3E%3C/svg%3E"); }
+.dash-footer::after { right:-1rem; transform:scaleX(-1); background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 500'%3E%3Cg fill='none' stroke='%235b5043' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath stroke-width='2.4' d='M78 490C92 390 88 286 78 184C72 120 82 58 112 8'/%3E%3Cpath stroke-width='2' d='M85 390C42 350 22 300 24 250C59 265 83 297 88 345M81 315C119 279 146 238 158 188C123 197 96 222 83 267M80 235C47 198 37 159 41 119C70 135 88 163 89 202M84 166C113 133 130 96 130 58C103 72 87 100 83 131'/%3E%3Cpath stroke-width='1' stroke-dasharray='5 7' d='M5 447C60 424 120 433 178 407C220 388 246 390 258 384M0 474C57 450 117 460 175 434C218 414 244 417 260 410'/%3E%3C/g%3E%3C/svg%3E"); }
+.dash-footer .dash-footer-inner { position:relative; z-index:2; }
+
+@media (max-width:760px) {
+    .agro-shared-footer,.dash-footer { margin-top:2.5rem; }
+    .agro-footer-inner { padding:1.8rem 0 1.35rem; }
+    .agro-footer-art { width:155px; height:360px; bottom:-3rem; opacity:.08; }
+    .agro-footer-art-left { left:-2.5rem; }
+    .agro-footer-art-right { right:-2.5rem; }
+    .agro-footer-links { gap:.45rem .75rem; max-width:520px; }
+    .dash-footer::before,.dash-footer::after { width:135px; opacity:.07; }
 }
-
-.agro-footer-brand strong,
-.agro-footer-brand span {
-    display: block;
+@media (max-width:430px) {
+    .agro-footer-art { width:110px; opacity:.055; }
+    .agro-footer-brand { margin-bottom:.85rem; }
+    .agro-footer-links { gap:.4rem .65rem; }
+    .dash-footer::before,.dash-footer::after { width:95px; opacity:.055; }
 }
-
-.agro-footer-brand strong {
-    font-family: 'DM Serif Display', Georgia, serif;
-    font-size: 1.05rem;
-    font-weight: 400;
-    color: #40382f;
-}
-
-.agro-footer-brand span:last-child {
-    margin-top: .15rem;
-    color: #85796b;
-    font-size: .72rem;
-}
-
-.agro-footer-mark {
-    display: grid!important;
-    place-items: center;
-    width: 34px;
-    height: 34px;
-    border: 1px solid rgba(79,71,60,.35);
-    border-radius: 50%;
-    color: #7d684f!important;
-    font-size: .75rem;
-    transform: rotate(-8deg);
-}
-
-.agro-footer-links {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: .35rem .95rem;
-    margin: 0 auto 1rem;
-}
-
-.agro-footer-links a {
-    position: relative;
-    z-index: 3;
-    color: #62584c;
-    font-size: .72rem;
-    text-decoration: none;
-    transition: color .2s ease;
-}
-
-.agro-footer-links a:hover,
-.agro-footer-links a:focus-visible {
-    color: #8b7355;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-}
-
-.agro-footer-copy {
-    margin: 0;
-    color: #978b7d;
-    font-size: .65rem;
-    letter-spacing: .025em;
-}
-
-.agro-footer-art {
-    position: absolute;
-    z-index: 1;
-    bottom: -4rem;
-    width: min(24vw, 270px);
-    height: 500px;
-    opacity: .12;
-    pointer-events: none;
-}
-
-.agro-footer-art-left { left: -1.5rem; transform: rotate(-2deg); }
-.agro-footer-art-right { right: -1.5rem; transform: rotate(2deg) scaleX(-1); }
-
-.agro-footer-art svg {
-    width: 100%;
-    height: 100%;
-}
-
-.agro-pencil-line {
-    fill: none;
-    stroke: #5b5043;
-    stroke-width: 2.2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.agro-pencil-line .fine { stroke-width: 1.15; }
-.agro-pencil-line .contour { stroke-width: 1; stroke-dasharray: 5 7; opacity: .8; }
-
-@media (max-width: 760px) {
-    .agro-shared-footer { margin-top: 2.5rem; }
-    .agro-footer-inner { padding: 1.8rem 0 1.35rem; }
-    .agro-footer-art { width: 155px; height: 360px; bottom: -3rem; opacity: .08; }
-    .agro-footer-art-left { left: -2.5rem; }
-    .agro-footer-art-right { right: -2.5rem; }
-    .agro-footer-links { gap: .45rem .75rem; max-width: 520px; }
-}
-
-@media (max-width: 430px) {
-    .agro-footer-art { width: 110px; opacity: .055; }
-    .agro-footer-brand { margin-bottom: .85rem; }
-    .agro-footer-links { gap: .4rem .65rem; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .agro-footer-links a { transition: none; }
-}
+@media (prefers-reduced-motion:reduce) { .agro-footer-links a { transition:none; } }
