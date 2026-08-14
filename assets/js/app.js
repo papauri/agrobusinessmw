@@ -729,11 +729,10 @@ class AgroBusinessRevolution {
         this.updateLanguageFlags();
         this.closeLanguageDropdown();
 
-        // Visual feedback
-        document.body.style.filter = 'brightness(1.1)';
-        setTimeout(() => {
-            document.body.style.filter = '';
-        }, 200);
+        // No brightness flash here any more. A filter on <body> forces the whole
+        // page to repaint and makes body a containing block for fixed-position
+        // descendants — expensive on a cheap phone, and it held the eye for 200ms
+        // after the text had already changed. The labels changing IS the feedback.
 
         // Announce to screen readers
         this.announceToScreenReader(`Language changed to ${lang === 'en' ? 'English' : 'Chichewa'}`);
@@ -759,17 +758,14 @@ class AgroBusinessRevolution {
 
     // Update updateTexts method
     updateTexts() {
+        // Swap the text synchronously. This used to dim each element to 0.5 opacity
+        // and defer the swap behind a 100ms setTimeout — which delayed every label
+        // on the page and, with no CSS transition bound to [data-text], read as a
+        // flicker rather than a fade. Switching language must feel immediate.
         document.querySelectorAll('[data-text]').forEach(el => {
             const key = el.dataset.text;
             const text = this.texts[this.currentLang][key];
-            if (text) {
-                // Smooth text transition
-                el.style.opacity = '0.5';
-                setTimeout(() => {
-                    el.textContent = text;
-                    el.style.opacity = '1';
-                }, 100);
-            }
+            if (text) el.textContent = text;
         });
 
         // Update search placeholders
