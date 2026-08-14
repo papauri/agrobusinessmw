@@ -62,6 +62,7 @@ $pageDesc  = $pageDesc  ?? 'Agricultural platform for Malawian farmers — live 
     <!-- Styles -->
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/first-loader.css">
+    <link rel="stylesheet" href="assets/css/footer.css">
 
     <!-- Inline Critical CSS for Loading Screen -->
     <style>
