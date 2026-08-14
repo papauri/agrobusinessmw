@@ -20,8 +20,181 @@
     box-shadow: none !important;
 }
 
-/* Keep district table/picker headers neutral rather than brown-heavy. */
 .data-table thead th,
 .district-region-header {
     color: #4f7a38;
+}
+
+/* =========================================================
+   MODALS — Simple modern agricultural pencil-sketch treatment
+   ========================================================= */
+.modal-content {
+    position: relative;
+    width: min(92vw, 720px);
+    max-width: 720px;
+    max-height: min(88vh, 760px);
+    overflow: hidden;
+    background: #fbfaf6 !important;
+    color: #3f4638;
+    border: 1px solid rgba(92, 105, 79, 0.18) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 22px 60px rgba(55, 61, 48, 0.16) !important;
+    isolation: isolate;
+}
+
+/* Quiet paper texture + hand-drawn agriculture in the background.
+   It stays deliberately faint so content remains the focus. */
+.modal-content::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    opacity: .34;
+    background:
+        radial-gradient(circle at 15% 82%, transparent 0 26px, rgba(91,104,78,.055) 27px 28px, transparent 29px),
+        radial-gradient(ellipse at 83% 77%, transparent 0 34px, rgba(91,104,78,.05) 35px 36px, transparent 37px),
+        linear-gradient(174deg, transparent 0 73%, rgba(91,104,78,.045) 73.2% 73.6%, transparent 74%),
+        repeating-linear-gradient(0deg, rgba(80,88,72,.018) 0 1px, transparent 1px 5px);
+}
+
+.modal-content::after {
+    content: "";
+    position: absolute;
+    right: 22px;
+    bottom: 16px;
+    width: 118px;
+    height: 82px;
+    z-index: -1;
+    pointer-events: none;
+    opacity: .16;
+    border-bottom: 1.5px solid #65715b;
+    border-radius: 0 0 55% 45%;
+    transform: rotate(-4deg);
+    background:
+        linear-gradient(72deg, transparent 47%, #65715b 48% 49%, transparent 50%) 25px 0 / 28px 42px no-repeat,
+        linear-gradient(108deg, transparent 47%, #65715b 48% 49%, transparent 50%) 47px 0 / 28px 42px no-repeat,
+        linear-gradient(75deg, transparent 47%, #65715b 48% 49%, transparent 50%) 69px 8px / 28px 42px no-repeat,
+        linear-gradient(105deg, transparent 47%, #65715b 48% 49%, transparent 50%) 90px 10px / 25px 40px no-repeat;
+}
+
+.modal-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.15rem 1.35rem !important;
+    background: rgba(255,255,252,.82) !important;
+    border-bottom: 1px solid rgba(92,105,79,.14) !important;
+    backdrop-filter: blur(8px);
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: #394333 !important;
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1.45rem;
+    font-weight: 400;
+    letter-spacing: .01em;
+}
+
+.modal-close {
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(92,105,79,.16) !important;
+    border-radius: 50% !important;
+    background: rgba(247,246,239,.78) !important;
+    color: #66705d !important;
+    transition: background .18s ease, transform .18s ease, border-color .18s ease;
+}
+
+.modal-close:hover {
+    background: #eef1e8 !important;
+    border-color: rgba(79,122,56,.28) !important;
+    transform: rotate(4deg);
+}
+
+.modal-body {
+    position: relative;
+    padding: 1.25rem !important;
+    background: transparent !important;
+    overflow-y: auto;
+}
+
+.modal-body .search-box {
+    background: rgba(255,255,252,.9) !important;
+    border: 1px solid rgba(92,105,79,.17) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 3px 12px rgba(55,61,48,.045) !important;
+}
+
+.modal-body input,
+.modal-body select,
+.modal-body textarea {
+    border-color: rgba(92,105,79,.18) !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+}
+
+.modal-body input:focus,
+.modal-body select:focus,
+.modal-body textarea:focus {
+    border-color: rgba(79,122,56,.5) !important;
+    box-shadow: 0 0 0 3px rgba(79,122,56,.08) !important;
+    outline: none;
+}
+
+.modal-body .selection-count {
+    color: #7b8472 !important;
+    font-size: .78rem;
+}
+
+/* Simple cards inside the modal: paper, not heavy panels. */
+.modal-content .overview-item,
+.modal-content .district-card,
+.modal-content .crop-item,
+.modal-content .reg-option {
+    border: 1px solid rgba(92,105,79,.14) !important;
+    background: rgba(255,255,252,.72) !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+}
+
+.modal-content .overview-item:hover,
+.modal-content .district-card:hover,
+.modal-content .crop-item:hover,
+.modal-content .reg-option:hover {
+    border-color: rgba(79,122,56,.28) !important;
+    background: rgba(248,250,242,.9) !important;
+    box-shadow: 0 6px 18px rgba(55,61,48,.06) !important;
+}
+
+/* Remove the inline-size feeling from registration/status variants. */
+.modal-content[style*="max-width"] {
+    max-width: min(92vw, 560px) !important;
+}
+
+@media (max-width: 600px) {
+    .modal-content {
+        width: calc(100vw - 20px);
+        max-height: 92vh;
+        border-radius: 15px !important;
+    }
+
+    .modal-header {
+        padding: 1rem !important;
+    }
+
+    .modal-body {
+        padding: 1rem !important;
+    }
+
+    .modal-content::after {
+        right: 8px;
+        bottom: 8px;
+        opacity: .11;
+    }
 }
