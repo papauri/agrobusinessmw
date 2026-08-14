@@ -32,7 +32,6 @@ $service = $service ?? null;
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') close();
         });
-        // Highlight the current page in the drawer.
         document.addEventListener('DOMContentLoaded', function () {
             const here = (location.pathname.split('/').pop() || 'index.php');
             document.querySelectorAll('#app-nav .app-nav-link').forEach(function (a) {
@@ -60,10 +59,20 @@ $service = $service ?? null;
                 }
             }, 0);
         }
+
+        // AgroBusiness no longer owns every service worker on the shared origin.
+        // Only retire the legacy worker shipped by this project. This prevents a
+        // separate application (for example another site under the same domain)
+        // from being accidentally unregistered.
         if ('serviceWorker' in navigator) {
+            const agroWorkerUrl = new URL('sw.js', window.location.href).href;
             navigator.serviceWorker.getRegistrations().then(regs => {
-                regs.forEach(r => r.unregister());
-            });
+                regs.forEach(reg => {
+                    if (reg.scriptURL === agroWorkerUrl) {
+                        reg.unregister();
+                    }
+                });
+            }).catch(() => {});
         }
     });
 </script>
