@@ -79,6 +79,42 @@
         }
     }
 
+    // The legacy page's inline handler writes reviewed_by='admin'. Intercept the
+    // browser action and route it through the identity-aware endpoint instead.
+    function bindPriceReviewForms() {
+        var table = document.getElementById('prices-table');
+        if (!table || table.dataset.reviewReady === '1') return;
+        table.dataset.reviewReady = '1';
+        Array.prototype.forEach.call(table.querySelectorAll('form'), function (form) {
+            form.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                var submitter = event.submitter;
+                if (!submitter || !submitter.name || submitter.name !== 'price_action') return;
+
+                var formData = new FormData(form);
+                formData.set('price_action', submitter.value);
+                submitter.disabled = true;
+
+                try {
+                    var response = await fetch('price-review.php', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Accept': 'application/json' },
+                        body: formData
+                    });
+                    var result = await response.json();
+                    if (!response.ok || !result.ok) {
+                        throw new Error(result.error || 'The review could not be saved.');
+                    }
+                    window.location.reload();
+                } catch (error) {
+                    submitter.disabled = false;
+                    window.alert(error.message || 'The review could not be saved.');
+                }
+            });
+        });
+    }
+
     document.addEventListener('click', function (e) {
         var th = e.target.closest && e.target.closest('th');
         if (!th || th.hasAttribute('data-no-sort')) return;
@@ -88,6 +124,11 @@
         if (index >= 0) sortTable(table, index, th);
     });
 
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addPriceAudit, { once: true });
-    else addPriceAudit();
+    function init() {
+        addPriceAudit();
+        bindPriceReviewForms();
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+    else init();
 })();
