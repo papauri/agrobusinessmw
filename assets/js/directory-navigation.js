@@ -14,12 +14,19 @@
     // app.js boots immediately on standalone pages. Its old Sellers / Buyers branch
     // opens the district picker. Suppress that boot path before app.js runs.
     let savedLanguageFlag = null;
+    let languageFlagRestored = false;
     if (directoryType) {
         window.__AGRO_DIRECTORY_SERVICE = pageName;
         window.AGRO_PAGE = null;
         savedLanguageFlag = localStorage.getItem('hasSelectedLanguage');
         if (savedLanguageFlag !== null) localStorage.setItem('hasSelectedLanguage', 'false');
     }
+    function restoreLanguageFlag() {
+        if (!directoryType || languageFlagRestored || savedLanguageFlag === null) return;
+        languageFlagRestored = true;
+        localStorage.setItem('hasSelectedLanguage', savedLanguageFlag);
+    }
+    if (directoryType) window.addEventListener('pagehide', restoreLanguageFlag, { once: true });
 
     const esc = (v) => window.escapeHtml
         ? window.escapeHtml(v)
@@ -57,13 +64,7 @@
 
     function breadcrumb(type, districtName, contactName) {
         const label = type === 'seller' ? 'Sellers' : 'Buyers';
-        return `<nav class="directory-breadcrumbs" aria-label="Breadcrumb">
-            <a href="index.php" class="directory-crumb" data-breadcrumb="home"><span class="material-symbols-rounded" aria-hidden="true">home</span><span>Home</span></a>
-            <span class="directory-crumb-separator" aria-hidden="true">chevron_right</span>
-            <a href="${TYPE_TO_PAGE[type]}" class="directory-crumb" data-breadcrumb="directory">${label}</a>
-            ${districtName ? `<span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><span class="directory-crumb directory-crumb-current">${esc(districtName)}</span>` : ''}
-            ${contactName ? `<span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><span class="directory-crumb directory-crumb-current directory-crumb-contact">${esc(contactName)}</span>` : ''}
-        </nav>`;
+        return `<nav class="directory-breadcrumbs" aria-label="Breadcrumb"><a href="index.php" class="directory-crumb" data-breadcrumb="home"><span class="material-symbols-rounded" aria-hidden="true">home</span><span>Home</span></a><span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><a href="${TYPE_TO_PAGE[type]}" class="directory-crumb" data-breadcrumb="directory">${label}</a>${districtName ? `<span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><span class="directory-crumb directory-crumb-current">${esc(districtName)}</span>` : ''}${contactName ? `<span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><span class="directory-crumb directory-crumb-current directory-crumb-contact">${esc(contactName)}</span>` : ''}</nav>`;
     }
 
     function showShareNotice(message) {
@@ -100,7 +101,7 @@
             const crumb = e.target.closest('[data-breadcrumb]');
             if (crumb) {
                 e.preventDefault();
-                if (crumb.dataset.breadcrumb === 'home') { window.location.href = 'index.php'; return; }
+                if (crumb.dataset.breadcrumb === 'home') { restoreLanguageFlag(); window.location.href = 'index.php'; return; }
                 if (history.state && /_detail$/.test(history.state.view || '')) history.back();
                 return;
             }
@@ -144,7 +145,6 @@
         const select = area.querySelector('#directory-district');
         const grid = area.querySelector('#directory-grid');
         const count = area.querySelector('#directory-count');
-
         function apply() {
             const term = search.value.trim().toLowerCase();
             const selected = select.value;
@@ -220,8 +220,8 @@
     function boot() {
         if (!directoryType) return;
         if (install()) {
-            // Restore the preference only after app.js has completed its own boot.
-            if (savedLanguageFlag !== null) localStorage.setItem('hasSelectedLanguage', savedLanguageFlag);
+            // Keep the temporary false value until this page leaves. That prevents
+            // a late async _bootPage() from redirecting this standalone directory.
             replayPage();
             return;
         }
