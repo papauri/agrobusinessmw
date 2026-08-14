@@ -1,105 +1,146 @@
 (function () {
     'use strict';
 
-    // Agricultural pencil-sketch first-visit loader.
-    var FIRST_VISIT_MS = 3200;
-    var RETURNING_MS = 650;
+    // AgroBusiness Malawi — first-visit agricultural field-notebook loader.
+    // The loader is deliberately calm, tactile and recognisably agricultural:
+    // pencil linework, field contours, maize, rain, sun and a market ledger.
+    var FIRST_VISIT_MS = 3600;
+    var RETURNING_MS = 700;
     var FLAG = 'agrobusiness:first-loader-seen';
 
     function injectSketchStyles() {
-        if (document.getElementById('agro-sketch-loader-styles')) return;
+        if (document.getElementById('agro-field-loader-styles')) return;
         var style = document.createElement('style');
-        style.id = 'agro-sketch-loader-styles';
+        style.id = 'agro-field-loader-styles';
         style.textContent = `
-            #loading-screen.agro-sketch-loader {
-                background:#f4efe4;
-                color:#3d382f;
+            #loading-screen.agro-field-loader {
+                background:#f3eee3;
+                color:#332f29;
                 overflow:hidden;
                 isolation:isolate;
+                font-family:Georgia,'Times New Roman',serif;
             }
-            #loading-screen.agro-sketch-loader::before,
-            #loading-screen.agro-sketch-loader::after {
+            #loading-screen.agro-field-loader::before,
+            #loading-screen.agro-field-loader::after {
                 content:""; position:absolute; inset:0; pointer-events:none;
             }
-            #loading-screen.agro-sketch-loader::before {
-                opacity:.18;
-                background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+            #loading-screen.agro-field-loader::before {
+                opacity:.22;
+                background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)' opacity='.15'/%3E%3C/svg%3E");
                 mix-blend-mode:multiply;
             }
-            #loading-screen.agro-sketch-loader::after {
-                opacity:.28;
-                background:repeating-linear-gradient(0deg,transparent 0 5px,rgba(63,56,47,.035) 6px,transparent 7px);
+            #loading-screen.agro-field-loader::after {
+                opacity:.22;
+                background:repeating-linear-gradient(0deg,transparent 0 6px,rgba(57,50,41,.035) 7px,transparent 8px);
             }
-            .agro-sketch-art { position:relative; width:min(88vw,520px); height:290px; margin:0 auto .5rem; }
-            .agro-sketch-paper { position:absolute; inset:0; }
-            .agro-sketch-paper svg { width:100%; height:100%; overflow:visible; }
-            .agro-sketch-line { fill:none; stroke:#4b453b; stroke-width:1.45; stroke-linecap:round; stroke-linejoin:round; opacity:.78; }
-            .agro-sketch-light { fill:none; stroke:#81786b; stroke-width:.8; stroke-linecap:round; opacity:.58; }
-            .agro-sketch-dark { fill:none; stroke:#302b24; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; opacity:.8; }
-            .agro-sketch-fill { fill:#756b5d; opacity:.10; }
-            .agro-sketch-title { font-family:Georgia,'Times New Roman',serif!important; font-size:clamp(2.1rem,7vw,3.5rem)!important; letter-spacing:.015em; color:#302b24!important; }
-            .agro-sketch-subtitle { font-family:Georgia,'Times New Roman',serif!important; font-style:italic; color:#6f665a!important; letter-spacing:.08em; }
-            .agro-sketch-rule { width:min(260px,65vw); height:1px; background:#807568; opacity:.45; margin:.75rem auto 1rem; }
-            .agro-sketch-progress { width:min(330px,72vw)!important; height:4px!important; border:1px solid rgba(75,69,59,.35); background:rgba(255,255,255,.35)!important; border-radius:0!important; overflow:hidden; }
-            .agro-sketch-progress .progress-bar { height:100%; background:#4b453b!important; border-radius:0!important; box-shadow:none!important; transition:width .08s linear; }
-            .agro-sketch-loader .loading-text { font-family:Georgia,'Times New Roman',serif; color:#62594e; font-size:.82rem; letter-spacing:.05em; }
-            .agro-sketch-stats { display:flex; justify-content:center; gap:.55rem; flex-wrap:wrap; margin-top:1.25rem; }
-            .agro-sketch-stats .stat-pill { background:transparent!important; border:1px solid rgba(75,69,59,.28)!important; border-radius:2px!important; color:#5e554a!important; box-shadow:none!important; font-family:Georgia,'Times New Roman',serif; font-size:.72rem; letter-spacing:.04em; }
-            .agro-sketch-privacy { display:inline-block; margin-top:1.1rem; color:#675e52!important; text-decoration:underline; text-underline-offset:3px; font-size:.72rem; }
-            .agro-sketch-caption { font-family:Georgia,'Times New Roman',serif; font-size:.7rem; color:#776e62; margin-top:.35rem; letter-spacing:.06em; }
+            .agro-field-stage { position:relative; width:min(94vw,680px); height:350px; margin:0 auto -.25rem; }
+            .agro-field-stage svg { width:100%; height:100%; overflow:visible; }
+            .agro-pencil { fill:none; stroke:#4a443a; stroke-linecap:round; stroke-linejoin:round; }
+            .agro-pencil-fine { stroke-width:1; opacity:.48; }
+            .agro-pencil-mid { stroke-width:1.45; opacity:.72; }
+            .agro-pencil-bold { stroke-width:2.2; opacity:.82; }
+            .agro-paper-fill { fill:#6c6255; opacity:.055; stroke:none; }
+            .agro-sketch-draw { stroke-dasharray:900; stroke-dashoffset:900; animation:agro-draw 2.6s cubic-bezier(.45,.05,.55,.95) forwards; }
+            .agro-sketch-draw.delay-1 { animation-delay:.12s; }
+            .agro-sketch-draw.delay-2 { animation-delay:.3s; }
+            .agro-sketch-draw.delay-3 { animation-delay:.5s; }
+            .agro-sketch-sway { transform-origin:250px 270px; animation:agro-sway 4s ease-in-out infinite; }
+            .agro-sketch-float { animation:agro-float 3.8s ease-in-out infinite; }
+            .agro-sketch-pulse { animation:agro-pulse 3.2s ease-in-out infinite; }
+            @keyframes agro-draw { to { stroke-dashoffset:0; } }
+            @keyframes agro-sway { 0%,100%{transform:rotate(-.8deg)} 50%{transform:rotate(.8deg)} }
+            @keyframes agro-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+            @keyframes agro-pulse { 0%,100%{opacity:.38} 50%{opacity:.82} }
+            .agro-field-label { fill:#665d51; font:italic 12px Georgia,'Times New Roman',serif; letter-spacing:.08em; }
+            .agro-field-title { font-family:Georgia,'Times New Roman',serif!important; font-size:clamp(2.2rem,7vw,3.8rem)!important; font-weight:400; letter-spacing:-.025em; color:#302b25!important; }
+            .agro-field-subtitle { font-family:Georgia,'Times New Roman',serif!important; font-style:italic; color:#746b5f!important; letter-spacing:.06em; font-size:.88rem!important; }
+            .agro-field-rule { width:min(360px,70vw); height:1px; background:#807466; opacity:.38; margin:.7rem auto 1rem; position:relative; }
+            .agro-field-rule::after { content:'✦'; position:absolute; left:50%; top:50%; transform:translate(-50%,-54%); background:#f3eee3; padding:0 .45rem; color:#8a7a64; font-size:.65rem; }
+            .agro-field-progress-wrap { width:min(380px,76vw); margin:0 auto; }
+            .agro-field-progress { width:100%!important; height:7px!important; border:1px solid rgba(74,68,58,.38); background:rgba(255,255,255,.32)!important; border-radius:1px!important; padding:1px; overflow:hidden; }
+            .agro-field-progress .progress-bar { height:100%; background:#51483c!important; border-radius:0!important; box-shadow:none!important; transition:width .08s linear; }
+            .agro-field-loader .loading-text { color:#62594d; font-family:Georgia,'Times New Roman',serif; font-size:.8rem; letter-spacing:.07em; min-height:1.4em; }
+            .agro-field-caption { color:#82786b; font-size:.67rem; letter-spacing:.11em; text-transform:uppercase; margin-top:.35rem; }
+            .agro-field-stats { display:flex; justify-content:center; gap:.5rem; flex-wrap:wrap; max-width:620px; margin:1.15rem auto 0; }
+            .agro-field-stats .stat-pill { background:rgba(255,255,255,.18)!important; border:1px solid rgba(74,68,58,.25)!important; border-radius:2px!important; color:#5f574c!important; box-shadow:none!important; padding:.55rem .85rem!important; font-family:Georgia,'Times New Roman',serif; font-size:.68rem; letter-spacing:.04em; }
+            .agro-field-stats .stat-count { display:inline!important; font-size:.95rem!important; color:#4f473c!important; margin-right:.2rem; }
+            .agro-field-privacy { display:inline-block; margin-top:.85rem; color:#655c50!important; font-size:.69rem; text-decoration:underline; text-underline-offset:3px; }
+            .agro-field-note { position:absolute; left:3%; top:11%; color:#85796a; font:italic 11px Georgia,'Times New Roman',serif; transform:rotate(-4deg); opacity:.7; }
+            .agro-field-stamp { position:absolute; right:3%; top:13%; border:1px solid rgba(104,83,60,.34); color:#776750; padding:.35rem .5rem; font:10px Georgia,'Times New Roman',serif; letter-spacing:.12em; text-transform:uppercase; transform:rotate(5deg); opacity:.7; }
+            @media (max-width:600px) {
+                .agro-field-stage { height:300px; }
+                .agro-field-note,.agro-field-stamp { display:none; }
+                .agro-field-stats { max-width:340px; }
+            }
             @media (prefers-reduced-motion:reduce) {
-                .agro-sketch-line,.agro-sketch-light { animation:none!important; }
+                .agro-sketch-draw { animation:none!important; stroke-dashoffset:0!important; }
+                .agro-sketch-sway,.agro-sketch-float,.agro-sketch-pulse { animation:none!important; }
             }
         `;
         document.head.appendChild(style);
     }
 
     function buildSketch(loader) {
-        loader.classList.add('agro-sketch-loader');
+        loader.classList.add('agro-field-loader');
         loader.innerHTML = `
             <div class="loading-content">
-                <div class="agro-sketch-art" aria-hidden="true">
-                    <div class="agro-sketch-paper">
-                        <svg viewBox="0 0 520 290" role="presentation">
-                            <!-- Malawi field contours -->
-                            <path class="agro-sketch-light" d="M28 238 C95 218 128 229 184 216 S290 218 343 202 S440 211 494 190"/>
-                            <path class="agro-sketch-light" d="M18 252 C92 232 136 245 194 230 S294 237 352 216 S443 224 505 205"/>
-                            <path class="agro-sketch-light" d="M54 266 C126 247 174 257 228 243 S331 247 389 232 S454 239 490 229"/>
-                            <!-- maize stalk -->
-                            <path class="agro-sketch-dark" d="M250 224 C249 190 250 147 252 104"/>
-                            <path class="agro-sketch-line" d="M251 171 C226 153 209 143 184 143 C203 160 222 170 250 179"/>
-                            <path class="agro-sketch-line" d="M251 192 C274 177 294 169 321 168 C301 185 278 195 251 201"/>
-                            <path class="agro-sketch-line" d="M252 134 C230 121 215 109 202 93 C222 102 240 113 253 122"/>
-                            <!-- maize ear -->
-                            <path class="agro-sketch-dark" d="M252 105 C239 91 238 73 250 57 C265 70 269 89 252 105 Z"/>
-                            <path class="agro-sketch-light" d="M246 64 l10 37 M242 72 l13 25 M252 60 l-2 43"/>
-                            <!-- loose pencil hatching -->
-                            <path class="agro-sketch-light" d="M220 220 l-18 14 M228 218 l-17 15 M284 221 l18 13 M293 218 l18 14 M166 231 l-16 10 M352 224 l18 11"/>
-                            <!-- farmer hand-tool silhouette -->
-                            <path class="agro-sketch-line" d="M104 225 C112 198 130 179 151 171"/>
-                            <path class="agro-sketch-dark" d="M148 173 l31 -27"/>
-                            <path class="agro-sketch-line" d="M178 146 l13 -5 l-7 12 Z"/>
-                            <!-- sun / field mark -->
-                            <circle class="agro-sketch-light" cx="410" cy="75" r="24"/>
-                            <path class="agro-sketch-light" d="M410 42 v-12 M410 108 v12 M377 75 h-12 M443 75 h12 M387 52 l-9 -9 M433 98 l9 9 M433 52 l9 -9 M387 98 l-9 9"/>
-                            <!-- tiny birds -->
-                            <path class="agro-sketch-light" d="M93 73 q7 -7 14 0 q7 -7 14 0 M339 58 q6 -6 12 0 q6 -6 12 0"/>
-                        </svg>
-                    </div>
+                <div class="agro-field-stage" aria-hidden="true">
+                    <span class="agro-field-note">Field notebook · Malawi</span>
+                    <span class="agro-field-stamp">Season · Market · Weather</span>
+                    <svg viewBox="0 0 680 350" role="presentation">
+                        <!-- pencil-drawn sky and sun -->
+                        <g class="agro-sketch-float">
+                            <circle class="agro-pencil agro-pencil-fine agro-sketch-pulse" cx="550" cy="72" r="30"/>
+                            <path class="agro-pencil agro-pencil-fine" d="M550 30v-15M550 114v15M508 72h-15M592 72h15M520 42l-11-11M580 102l11 11M580 42l11-11M520 102l-11 11"/>
+                            <path class="agro-pencil agro-pencil-fine" d="M92 76q10-9 20 0q10-9 20 0M382 55q8-7 16 0q8-7 16 0"/>
+                        </g>
+
+                        <!-- distant hills -->
+                        <path class="agro-pencil agro-pencil-fine agro-sketch-draw" d="M30 216 C105 176 145 191 204 170 S313 191 376 157 S491 174 555 145 S624 151 662 132"/>
+                        <path class="agro-pencil agro-pencil-fine agro-sketch-draw delay-1" d="M20 232 C92 198 145 210 210 189 S316 208 384 176 S486 191 553 163 S625 170 672 151"/>
+
+                        <!-- field contours -->
+                        <path class="agro-pencil agro-pencil-fine agro-sketch-draw delay-1" d="M15 257 C92 233 137 245 207 229 S322 238 389 216 S501 224 670 198"/>
+                        <path class="agro-pencil agro-pencil-fine agro-sketch-draw delay-2" d="M18 278 C92 253 151 266 216 248 S326 259 402 237 S521 244 672 218"/>
+                        <path class="agro-pencil agro-pencil-mid agro-sketch-draw delay-2" d="M30 303 C110 275 163 290 229 269 S343 279 418 258 S535 267 660 242"/>
+                        <path class="agro-pencil agro-pencil-fine agro-sketch-draw delay-3" d="M78 326 C150 302 194 314 252 296 S350 303 431 281 S537 290 617 270"/>
+
+                        <!-- hand-drawn maize -->
+                        <g class="agro-sketch-sway">
+                            <path class="agro-pencil agro-pencil-bold agro-sketch-draw delay-1" d="M292 292 C291 251 292 207 294 151 C295 126 296 105 300 84"/>
+                            <path class="agro-pencil agro-pencil-mid agro-sketch-draw delay-2" d="M293 228 C263 204 236 192 208 190 C229 211 257 226 293 240"/>
+                            <path class="agro-pencil agro-pencil-mid agro-sketch-draw delay-2" d="M294 254 C326 229 354 219 388 220 C363 241 331 254 294 267"/>
+                            <path class="agro-pencil agro-pencil-mid agro-sketch-draw delay-3" d="M296 190 C268 172 248 155 231 135 C255 145 277 159 297 176"/>
+                            <path class="agro-pencil agro-pencil-bold agro-sketch-draw delay-3" d="M300 84 C284 67 284 45 299 27 C316 47 319 67 300 84 Z"/>
+                            <path class="agro-pencil agro-pencil-fine" d="M293 36l10 43M289 48l12 27M301 34l-2 45M291 205l-21 9M303 238l24-11M287 276l-18 12"/>
+                        </g>
+
+                        <!-- farmer's hoe, lightly tucked into the field -->
+                        <path class="agro-pencil agro-pencil-mid agro-sketch-draw delay-2" d="M118 282 C129 246 151 214 180 185"/>
+                        <path class="agro-pencil agro-pencil-bold agro-sketch-draw delay-3" d="M177 187 L213 154"/>
+                        <path class="agro-pencil agro-pencil-mid agro-sketch-draw delay-3" d="M211 153 l20 -7 l-10 18 Z"/>
+
+                        <!-- little seed marks / hatching -->
+                        <path class="agro-pencil agro-pencil-fine" d="M84 292l-14 8M96 289l-13 9M467 282l17 9M479 278l18 9M520 252l16 8M532 248l17 8"/>
+                    </svg>
                 </div>
-                <h1 class="loading-title agro-sketch-title">AgroBusiness</h1>
-                <p class="loading-subtitle agro-sketch-subtitle">Malawi · grown from the ground up</p>
-                <div class="agro-sketch-rule"></div>
-                <div class="loading-progress agro-sketch-progress"><div class="progress-bar"></div></div>
+
+                <h1 class="loading-title agro-field-title">AgroBusiness</h1>
+                <p class="loading-subtitle agro-field-subtitle">Malawi · grown from the ground up</p>
+                <div class="agro-field-rule"></div>
+                <div class="agro-field-progress-wrap">
+                    <div class="loading-progress agro-field-progress" aria-hidden="true"><div class="progress-bar"></div></div>
+                </div>
                 <p class="loading-text">Preparing the fields · 0%</p>
-                <p class="agro-sketch-caption">Crops · markets · weather · farmers</p>
-                <a class="loader-privacy agro-sketch-privacy" href="privacy.php">Privacy Policy</a>
+                <p class="agro-field-caption">Crops · markets · weather · farmers</p>
+                <a class="loader-privacy agro-field-privacy" href="privacy.php">Privacy Policy</a>
             </div>
-            <div class="loading-stats agro-sketch-stats">
-                <div class="stat-pill"><span class="stat-count" id="loading-districts">28</span> Districts</div>
-                <div class="stat-pill"><span class="stat-count" id="loading-crops">9</span> Crops</div>
-                <div class="stat-pill">Live Weather</div>
-                <div class="stat-pill">24/7 Prices</div>
+
+            <div class="loading-stats agro-field-stats">
+                <div class="stat-pill"><span class="stat-count" id="loading-districts">28</span> districts</div>
+                <div class="stat-pill"><span class="stat-count" id="loading-crops">9</span> crops</div>
+                <div class="stat-pill">live weather</div>
+                <div class="stat-pill">market prices</div>
             </div>
         `;
     }
@@ -138,7 +179,7 @@
             if (bar) bar.style.width = pct + '%';
             if (text) {
                 var messages = firstVisit
-                    ? ['Sketching the fields', 'Mapping districts', 'Gathering crop data', 'Reading the weather', 'Almost ready']
+                    ? ['Sketching the fields', 'Mapping Malawi', 'Gathering crop data', 'Reading the weather', 'Opening the market']
                     : ['Opening AgroBusiness', 'Almost ready'];
                 var index = Math.min(messages.length - 1, Math.floor((pct / 100) * messages.length));
                 text.textContent = messages[index] + ' · ' + pct + '%';
