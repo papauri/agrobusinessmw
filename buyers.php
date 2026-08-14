@@ -1,5 +1,5 @@
 <?php
-$service   = 'buyers';
+$service   = null;
 $pageTitle = 'Find Buyers — AgroBusiness Malawi';
 $pageDesc  = 'Find markets and buyers for your produce across Malawi districts.';
 include __DIR__ . '/partials/function-page.php';
