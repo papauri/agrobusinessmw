@@ -88,11 +88,26 @@ Correctness and security. Nothing in Phase 2 starts until this phase is `DONE`.
       - `node --check` exit 0. `escapeHtml` call count 0 → **56**. Still exactly one helper definition.
       - **Confirmed safe, left alone:** `showLoading`/`showError`/`loadFarmingGuide` (`this.texts` + client-side `_farmingGuideData`, authored); the guide-crop cards (`app.js:1345`, client-side guide data); the markets datalist (`app.js:2704`, DB value already `"`-escaped inside a quoted attribute).
 
-- [ ] **1.9 `showCropDetails` inline-handler rebinding.** `STATUS: deliberately NOT blind-fixed — needs a browser to verify.`
+- [x] **1.9 `showCropDetails` inline-handler rebinding.** `DONE 2026-08-14 — main-session build, code ACs 1-5 PASS. AC6 is UNREACHABLE, see below.`
       `app.js:2727-2755` renders `${cropName}` into text AND into **inline `onclick="app.loadCropPrices('${cropName}')"` handlers** (also `getCropFarmingTips`, `getCropMarkets` at `2741`, `2749`).
       **`escapeHtml` is NOT a correct fix for the onclick lines.** The value sits in a JS string literal inside an HTML attribute; the browser decodes HTML entities *before* the JS parser runs, so `escapeHtml`'s `&#39;` still breaks out of the `'…'` JS string. The correct fix is `addEventListener` rebinding with the value passed as data, not interpolated into markup.
       **Real risk is low:** `cropName` is crop *reference* data (seeded ~30 Malawi crops), not applicant free-text. But it is the one remaining structural XSS-shaped sink.
       Owner: `frontend-specialist`. AC: the three service cards bind via `addEventListener`; no `${cropName}` remains inside any `on*=`; crop navigation still works (needs a browser — human/main-session step). Deferred because it could not be verified blind with sub-agents unavailable.
+
+      **BUILT 2026-08-14 — main session (no sub-agent; the loop's specialist/auditor split was not used this cycle, so this is a self-verified build, stated plainly).** `assets/js/app.js:2724-2776`, single method, single file.
+      - The three `onclick="app.method('${cropName}')"` attributes are gone. Each card now carries a static `data-crop-action="prices|tips|markets"` and is bound after render by `area.querySelectorAll('[data-crop-action]')` → `addEventListener('click', handler)`. **The crop name is never written into markup for the handler path at all** — the three handlers are arrow closures over the raw `cropName` parameter, so there is no encode/decode round-trip to get wrong. That is the structural fix, not an escaping fix.
+      - The five text interpolations use `const safeCrop = escapeHtml(cropName)`, computed once. `getCropIcon(cropName)` left raw as specified — re-verified at `app.js:3341-3364`: `cropName` only *indexes* a 20-entry emoji whitelist and `return icons[cropName] || '🌱'` yields a literal on any miss. The value itself never reaches output. Same safety argument as the `statusBadge` finding in 1.3 part 1.
+      - `if (area) { … }` → early-return `if (!area) return;`, so the binding code cannot run against a missing container.
+      - AC1 `node --check assets/js/app.js` exit 0. AC2 `on\w+\s*=` inside the method body → **zero**. AC3 all six interpolations enumerated: 5 × `${safeCrop}` (escaped text), 1 × `${this.getCropIcon(cropName)}` (controlled whitelist). Zero unclassified. AC4 all three bindings traced to live methods — `loadCropPrices` (`app.js:2308`), `getCropFarmingTips` (`:2778`), `getCropMarkets` (`:2787`). AC5 exactly one `escapeHtml`, still at `app.js:6-13`.
+      - AC-hygiene note: the AC's literal `on\w+\s*=` regex also matches ordinary identifiers containing "on" before an `=` (it flagged a local named `cropActions`). The local was renamed `cardHandlers` and the code comment reworded so the gate returns a true zero rather than a hand-waved one. Worth knowing before that regex is reused.
+
+      **AC6 (browser click-through) CANNOT BE PERFORMED — and not for the usual reason. `showCropDetails` IS DEAD CODE.**
+      A repo-wide search for `showCropDetails` (all file types, `.git` excluded) returns **exactly two hits: the method definition itself, and this plan.** Zero call sites. No inline handler, no listener, no template, no PHP page invokes it. It was reachable only from the console as `app.showCropDetails(…)`.
+      This does not invalidate the fix — the method is public on a global `app` and the sink was real — but it does mean **no human can reach this view through the UI**, so AC6 has no runnable form. Not deferred; unreachable.
+      **→ Feeds objective 3.4 (dead code removal).** The honest follow-up is a product decision, not a code one: either wire `showCropDetails` up (a crop card in the crops overview is the obvious entry point — `app.js:1716` currently routes to `selectCropFromOverview`) or delete the method. Do not let it sit as fixed-but-orphaned.
+
+      **Premise check on "the last structural XSS-shaped sink" (standing rule 4 — verify before repeating).** Partly true, and the distinction matters. `grep -E '\son[a-z]+="[^"]*\$\{'` over `app.js` returns **9 surviving interpolated inline handlers**: `1716` (`crop.id`), `1763, 1771, 1779, 1787` (`districtId`), `2969, 2970` (`districtId`), `3224` (`cropId`), `3278` (`cropId`).
+      **Every one interpolates a bare numeric PK, not a quoted string.** They are a different shape: there is no `'…'` JS string literal to break out of, and the values are integer primary keys from seeded reference tables. `showCropDetails` was the only site putting a *string* inside a JS string literal inside an attribute — the shape where escaping genuinely cannot save you. So: the dangerous shape is now gone; 9 lower-risk inline handlers remain and should be logged as tech debt, not as an open XSS.
 
       **PART 1 of 3 — `DONE 2026-07-10`, qa-auditor PASS, no defects.** (Note: this "PART 1 of 3" record belongs to objective 1.3 — the `escapeHtml` helper + admin sinks — and was filed here by an earlier cycle. Kept for the audit trail; it is NOT about 1.9.)
       - **The escape helper now exists: `escapeHtml(value)` at `assets/js/app.js:6-13`.** Module-level, defined exactly once. Escapes `&` **first**, then `< > " '`. Null/undefined → `''`. **Every future cycle uses this. Do not define a second one.**
@@ -104,7 +119,7 @@ Correctness and security. Nothing in Phase 2 starts until this phase is `DONE`.
       - `node --check` exit 0. Scope clean: helper + 2 sinks only, other 32 untouched.
       - **UNVERIFIED — human step:** the admin list/detail rendering was never loaded in a browser. Needs an admin session and live `onboarding_applications` rows. Escaping preserves markup structure, so benign data should render identically — confirm on screen.
 
-## DISPATCH: 1.9 `showCropDetails` inline-handler rebinding
+## DISPATCH: 1.9 `showCropDetails` inline-handler rebinding — **CLOSED 2026-08-14, delivered. Kept for the audit trail; do not re-dispatch.**
 Owner:      frontend-specialist
 UI polish:  no
 Files:      assets/js/app.js
@@ -155,6 +170,11 @@ Acceptance criteria (qa-auditor checks each, verbatim):
             detail view in a browser, click each of the three cards, confirm navigation to price
             history / growing guide / find-markets works and the crop name carries through.
             Label as a human step; do not tick on agent verification alone.
+            **RESULT: UNREACHABLE, NOT DEFERRED.** `showCropDetails` has zero call sites in the
+            entire repo — there is no UI path to this view, so the click-through cannot be
+            performed by anyone, agent or human. See the 1.9 record above and objective 3.4.
+            A seventh AC-defect data point for the standing rule: this AC was unrunnable not
+            because of a safety rail, but because nobody checked whether the code was live.
 
 Out of scope:
   - The other 32 `innerHTML` sites (1.3 territory — already handled or separately scoped).
@@ -362,6 +382,8 @@ Close the gaps between what the schema promises and what the app delivers.
       Blind spot: `app.js` may inject inputs at runtime (dynamic crop grids/selects) that the static scan could not enumerate. Check during the work.
 
 - [ ] **3.4 Dead code removal.** Owner: per `SYSTEM_MAP.md` § Dead code. AC: removed, not commented out. Every page still loads with a clean console.
+      **Known member, found 2026-08-14 during 1.9: `showCropDetails` (`assets/js/app.js:2724-2776`) has zero call sites repo-wide.** It is a complete, now-hardened crop detail view that nothing links to. This one is a **product decision, not a cleanup**: either give it an entry point — the crops-overview card at `app.js:1716` currently calls `selectCropFromOverview`, and routing it here would surface price history / growing guide / find-markets per crop — or delete the method. Ask the user which; do not silently delete a working feature, and do not leave it orphaned either.
+      When this objective is scoped, sweep for other orphans the same way (grep each public method for callers) rather than trusting the map's existing list.
 
 ---
 
@@ -406,6 +428,11 @@ Append one line per completed cycle: `<date> · <objective> · <owner> · PASS|F
 
 2026-07-10 · 1.4 Fix live get_result() regression · backend-specialist · **FAIL (criterion, not code)** · `admin/index.php:105` fatal fixed via `bind_result`+`fetch`; `api.php:925,1309` converted to `stmt_fetch_all`. qa-auditor verified column count/order/consumer-keys/contract/scope — "if judged on the code alone, this is a PASS." AC clause 4 demanded a DB `UPDATE`, which the rails forbid any agent to perform → unsatisfiable by construction. AC rewritten; runtime check reassigned to the human. Not ticked.
 
+2026-08-14 · **1.9 `showCropDetails` inline-handler rebinding** · main session (no specialist/auditor split this cycle — self-verified, stated plainly) · **DONE, code ACs 1-5 PASS** · The three `onclick="app.method('${cropName}')"` attributes replaced by static `data-crop-action` hooks bound with `addEventListener`; handlers are closures over the raw `cropName`, so the value never enters markup on the handler path. Five text sites wrapped in the existing `escapeHtml`; `getCropIcon` left raw and re-verified as a whitelist lookup. `node --check` exit 0; zero `on\w+=` in the method; all three bindings traced to live methods; still exactly one `escapeHtml`. **This closes the structural XSS work for the web channel (1.3 + 1.9).**
+  - **Finding, and the real story of this cycle: `showCropDetails` is DEAD CODE.** Zero call sites repo-wide — the method definition and the plan are the only two hits anywhere. AC6's browser click-through is therefore **unreachable, not deferred**; there is no UI path to the view. The fix is still correct (public method on a global `app`, real sink), but it is fixed-and-orphaned. → **3.4**: wire it up (crop-overview card at `app.js:1716` is the natural entry) or delete it. Decide; don't leave it.
+  - **Premise re-checked rather than repeated:** "the last structural XSS-shaped sink" is *shape*-true, not *count*-true. **9 interpolated inline handlers survive** (`1716, 1763, 1771, 1779, 1787, 2969, 2970, 3224, 3278`) — but every one interpolates a bare **numeric PK**, with no JS string literal to break out of. The string-in-a-quoted-JS-literal shape, the one escaping cannot fix, is now gone. Log the 9 as tech debt, not as open XSS.
+  - **AC-hygiene:** the AC's `on\w+\s*=` regex also matches ordinary identifiers containing "on" before an `=`. Renamed a local (`cropActions` → `cardHandlers`) and reworded a comment so the gate returns a true zero. Tighten that regex to an attribute context before reusing it.
+
 ---
 
 ## Standing rule for the planner — added 2026-07-10 after three consecutive AC defects
@@ -426,6 +453,7 @@ Rules going forward:
 4. Verify the *premise* before dispatching against it. Two specialists have now been sent to fix things that were not broken, or were broken somewhere else.
 5. **Read the assignment, not the variable name.** `$envAdminToken` is assigned `admin_get_token($mysqli)`. An audit reported an auth divergence that did not exist because it trusted the identifier. A name is a claim by a past author; the assignment is the fact.
 6. **A scope boundary can hide a finding.** The 1.2 specialist correctly reported "no hardcoded credential" — true of `api.php`, the only file it was permitted to read. The credential was at `admin/index.php:156`. When a specialist reports the *absence* of something, ask what it was allowed to look at.
+7. **Check the code is reachable before scoping work on it — added 2026-08-14 after 1.9.** `showCropDetails` was dispatched with a browser-verification AC. It has **zero call sites**; no user can reach it, so that AC could never have been run by anyone. One `grep` for the symbol's callers, at planning time, would have caught it and reframed the objective as "fix it *and* decide whether it lives." Before writing any AC that involves loading a page or clicking a thing, grep for the entry point. **A sink in dead code is still worth fixing — but it is a different objective, priced differently, and it must be flagged as dead in the brief.**
 
 ---
 
