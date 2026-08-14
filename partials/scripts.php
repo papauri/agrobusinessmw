@@ -18,13 +18,14 @@ $service = $service ?? null;
         document.addEventListener('DOMContentLoaded', function(){ const here=(location.pathname.split('/').pop()||'index.php'); document.querySelectorAll('#app-nav .app-nav-link').forEach(function(a){const key=a.getAttribute('data-nav');if((here===''||here==='index.php')?key==='home':key===here)a.classList.add('is-current');}); });
     })();
 </script>
+<!-- Directory navigation must register BEFORE app.js boots standalone function pages. -->
+<script src="assets/js/directory-navigation.js"></script>
 <script src="assets/js/app.js" defer></script>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/sortable-table.js" defer></script>
 <script src="assets/js/price-report-story.js" defer></script>
 <script src="assets/js/price-location-selector.js" defer></script>
 <script src="assets/js/phone-normalizer.js" defer></script>
-<script src="assets/js/directory-navigation.js" defer></script>
 <script src="assets/js/quiet-db-notification.js" defer></script>
 <link rel="stylesheet" href="assets/css/price-report-story.css">
 <link rel="stylesheet" href="assets/css/price-location-selector.css">
