@@ -61,6 +61,7 @@ $pageDesc  = $pageDesc  ?? 'Agricultural platform for Malawian farmers — live 
 
     <!-- Styles -->
     <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/first-loader.css">
 
     <!-- Inline Critical CSS for Loading Screen -->
     <style>
@@ -113,4 +114,5 @@ $pageDesc  = $pageDesc  ?? 'Agricultural platform for Malawian farmers — live 
             100% { transform: rotate(360deg); }
         }
     </style>
+    <script src="assets/js/first-loader.js"></script>
 </head>
