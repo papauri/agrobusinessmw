@@ -39,6 +39,7 @@ if ($r = $db->query($sql)) while ($row = $r->fetch_assoc()) $rows[] = $row;
 <title>Price Review Audit — AgroBusiness Malawi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/footer.css">
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f5f2eb;color:#3e3930;font-family:'DM Sans',system-ui,sans-serif}.wrap{max-width:1280px;margin:auto;padding:2rem 1rem}.top{display:flex;justify-content:space-between;gap:1rem;align-items:end;margin-bottom:1.5rem}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#8B7355;font-size:.75rem;font-weight:700}.top h1{font-family:'DM Serif Display',serif;font-weight:400;margin:.35rem 0;font-size:2rem}.back{color:#8B7355;font-weight:600}.card{background:#fff;border:1px solid #e8e2d9;border-radius:14px;overflow:auto;box-shadow:0 8px 24px rgba(70,60,50,.08)}table{width:100%;border-collapse:collapse;min-width:1050px}th,td{text-align:left;padding:.8rem;border-bottom:1px solid #eee9e1;vertical-align:top}th{background:#faf8f4;font-size:.76rem;text-transform:uppercase;letter-spacing:.04em;color:#6b5f52;position:sticky;top:0}td{font-size:.84rem}.muted{color:#8f8478;font-size:.76rem}.pill{display:inline-block;border-radius:999px;padding:.2rem .55rem;font-size:.7rem;font-weight:700}.pending{background:#fff3cd;color:#8a6500}.approved{background:#dcfce7;color:#166534}.rejected,.flagged{background:#fee2e2;color:#991b1b}.detail{line-height:1.55}.detail strong{color:#3e3930}.empty{padding:2rem;text-align:center;color:#6b5f52}
 </style></head>
@@ -57,4 +58,6 @@ if ($r = $db->query($sql)) while ($row = $r->fetch_assoc()) $rows[] = $row;
 <td><?= htmlspecialchars($p['flag_reason'] ?: '—') ?></td>
 </tr><?php endforeach; ?>
 </tbody></table><?php endif; ?>
-</div></div></body></html>
+</div></div>
+<?php include dirname(__DIR__) . '/partials/footer.php'; ?>
+</body></html>
