@@ -35,4 +35,5 @@ include __DIR__ . '/partials/head.php';
             <p style="margin-top:1.5rem"><a href="index.php">← Back to AgroBusiness Malawi</a></p>
         </div>
     </main>
+    <?php include __DIR__ . '/partials/footer.php'; ?>
 </body>
