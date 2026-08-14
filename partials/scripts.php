@@ -23,6 +23,7 @@ $service = $service ?? null;
 <script src="assets/js/sortable-table.js" defer></script>
 <script src="assets/js/price-report-story.js" defer></script>
 <script src="assets/js/price-location-selector.js" defer></script>
+<script src="assets/js/phone-normalizer.js" defer></script>
 <script src="assets/js/quiet-db-notification.js" defer></script>
 <link rel="stylesheet" href="assets/css/price-report-story.css">
 <link rel="stylesheet" href="assets/css/price-location-selector.css">
