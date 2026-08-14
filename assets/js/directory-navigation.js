@@ -1,6 +1,7 @@
 /* AgroBusiness Malawi — contact directory + URL/history navigation. */
 (function () {
     'use strict';
+    const INITIAL_URL = window.location.href;
     const PAGE_TO_TYPE = { sellers: 'seller', buyers: 'buyer' };
     const TYPE_TO_PAGE = { seller: 'sellers.php', buyer: 'buyers.php' };
     const cache = { seller: null, buyer: null };
@@ -46,7 +47,12 @@
         search.addEventListener('input', apply); select.addEventListener('change', () => { pushDirectoryState(type, select.value); apply(); }); apply();
     }
     async function openDirectory(type, district, shouldPush) { try { if (window.app && typeof window.app.showScreen === 'function') window.app.showScreen('content'); if (window.app && typeof window.app.showLoading === 'function') window.app.showLoading(); const rows = await loadAll(type); render(type, rows, district || '', shouldPush); } catch (e) { console.error('Directory load failed:', e); if (window.app && typeof window.app.showError === 'function') window.app.showError('Could not load contacts. Please try again.'); } }
-    async function replayPage() { const page = location.pathname.split('/').pop() || 'index.php', type = PAGE_TO_TYPE[page.replace('.php', '')]; if (!type) return; const qs = new URLSearchParams(location.search), id = Number(qs.get(type + '_id') || 0), district = qs.get('district_id') || '', rows = await loadAll(type); if (id) { const row = rows.find(r => Number(r.id) === id); if (row) openDetail(row, type, false, district); else render(type, rows, district, false); } else render(type, rows, district, false); }
+    async function replayPage() {
+        const page = location.pathname.split('/').pop() || 'index.php', type = PAGE_TO_TYPE[page.replace('.php', '')]; if (!type) return;
+        const initial = new URL(INITIAL_URL, location.href), qs = initial.searchParams, id = Number(qs.get(type + '_id') || 0), district = qs.get('district_id') || '', rows = await loadAll(type);
+        if (initial.search) history.replaceState({ screen: 'content', view: id ? type + '_detail' : type + '_directory', type, id: id || undefined, district }, '', initial.pathname + initial.search);
+        if (id) { const row = rows.find(r => Number(r.id) === id); if (row) openDetail(row, type, false, district); else render(type, rows, district, false); } else render(type, rows, district, false);
+    }
     function install() {
         if (!window.app) return;
         const originalOpenService = window.app.openService.bind(window.app);
