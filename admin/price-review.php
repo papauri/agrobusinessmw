@@ -2,9 +2,10 @@
 /**
  * Community price review endpoint.
  *
- * The legacy admin page historically wrote reviewed_by='admin'. This endpoint
- * keeps the same CSRF/session gate but records the authenticated admin username
- * from the same admin_users row used by the existing login flow.
+ * Review identity comes from the authenticated admin_user_id stored by the
+ * admin authentication gateway. The browser never gets to choose reviewer
+ * identity, and the endpoint fails closed if an old/non-gateway session reaches
+ * this action.
  */
 
 session_start();
@@ -23,7 +24,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     respond(405, ['ok' => false, 'error' => 'POST required.']);
 }
 
-if (!isset($_SESSION['admin_logged_in'])) {
+if (!isset($_SESSION['admin_logged_in'], $_SESSION['admin_user_id'])
+    || $_SESSION['admin_logged_in'] !== true
+    || (int)$_SESSION['admin_user_id'] <= 0) {
     respond(401, ['ok' => false, 'error' => 'Authentication required.']);
 }
 
@@ -35,7 +38,6 @@ if (!is_string($csrf) || !isset($_SESSION['csrf_token']) || !hash_equals($_SESSI
 $action = $_POST['price_action'] ?? '';
 $priceId = (int)($_POST['price_review_id'] ?? 0);
 $note = trim((string)($_POST['price_notes'] ?? ''));
-
 $statusMap = ['approve' => 'approved', 'reject' => 'rejected'];
 if ($priceId <= 0 || !isset($statusMap[$action])) {
     respond(422, ['ok' => false, 'error' => 'Invalid price review request.']);
@@ -62,22 +64,29 @@ if ($db->connect_error) {
 }
 $db->set_charset('utf8mb4');
 
-// The existing admin login authenticates against the first admin_users row.
-// Resolve the same row here rather than trusting a username supplied by the browser.
-$adminResult = $db->query("SELECT id, username FROM admin_users ORDER BY id ASC LIMIT 1");
-$admin = $adminResult ? $adminResult->fetch_assoc() : null;
-if (!$admin || $admin['username'] === '') {
-    respond(503, ['ok' => false, 'error' => 'Admin identity could not be resolved.']);
+$adminId = (int)$_SESSION['admin_user_id'];
+$identity = $db->prepare("SELECT id, username FROM admin_users WHERE id=? LIMIT 1");
+if (!$identity) {
+    respond(503, ['ok' => false, 'error' => 'Admin identity lookup could not be prepared.']);
 }
-$reviewer = (string)$admin['username'];
+$identity->bind_param('i', $adminId);
+if (!$identity->execute()) {
+    $identity->close();
+    respond(503, ['ok' => false, 'error' => 'Admin identity lookup failed.']);
+}
+$identity->bind_result($resolvedId, $reviewer);
+if (!$identity->fetch() || (int)$resolvedId !== $adminId || $reviewer === '') {
+    $identity->close();
+    respond(401, ['ok' => false, 'error' => 'Admin identity is no longer valid.']);
+}
+$identity->close();
+
 $newStatus = $statusMap[$action];
 $newReason = $action === 'reject' ? ($note !== '' ? $note : null) : null;
 
 try {
     $db->begin_transaction();
 
-    // Lock the current report so two simultaneous reviewers cannot both act on
-    // the same pending/flagged state and overwrite each other's decision.
     $read = $db->prepare(
         "SELECT id, status FROM crowdsourced_prices
          WHERE id = ? AND status IN ('pending','flagged')
