@@ -47,6 +47,8 @@ $service = $service ?? null;
 <script src="assets/js/app.js" defer></script>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/sortable-table.js" defer></script>
+<script src="assets/js/price-report-story.js" defer></script>
+<link rel="stylesheet" href="assets/css/price-report-story.css">
 
 <script>
     window.addEventListener('load', function () {
