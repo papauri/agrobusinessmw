@@ -40,7 +40,6 @@ include __DIR__ . '/head.php';
     </noscript>
 
     <?php
-    // content-screen with optional pre-filled intro
     if ($introHtml !== '') {
         ob_start();
         include __DIR__ . '/content-screen.php';
@@ -52,6 +51,7 @@ include __DIR__ . '/head.php';
     ?>
     <?php include __DIR__ . '/modals.php'; ?>
     <?php include __DIR__ . '/nav.php'; ?>
+    <?php include __DIR__ . '/footer.php'; ?>
     <?php include __DIR__ . '/scripts.php'; ?>
 </body>
 
