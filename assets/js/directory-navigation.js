@@ -9,6 +9,7 @@
     const cache = { seller: null, buyer: null };
     let detailModal = null;
     let installed = false;
+    let standaloneStarted = false;
 
     if (!directoryType) return;
 
@@ -25,13 +26,18 @@
     function detailUrl(type, id, district) {
         const q = new URLSearchParams();
         q.set(type + '_id', String(id));
-        if (district) q.set('district_id', String(district));
+        if (district) q.set('district_id', district);
         return TYPE_TO_PAGE[type] + '?' + q.toString();
     }
 
     async function loadAll(type) {
         if (cache[type]) return cache[type];
-        const response = await fetch('directory-api.php?type=' + encodeURIComponent(type === 'seller' ? 'sellers' : 'buyers') + '&district_id=0', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+        const apiType = type === 'seller' ? 'sellers' : 'buyers';
+        const response = await fetch('directory-api.php?type=' + encodeURIComponent(apiType) + '&district_id=0', {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store'
+        });
+        if (!response.ok) throw new Error('Directory API returned HTTP ' + response.status);
         const data = await response.json();
         if (!data.success) throw new Error(data.error || 'Unable to load directory');
         cache[type] = Array.isArray(data.data) ? data.data : [];
@@ -136,7 +142,7 @@
         } catch (error) {
             console.error('Directory load failed:', error);
             const area = document.getElementById('content-area');
-            if (area) area.innerHTML = '<div class="directory-empty"><strong>Unable to load contacts</strong><p>Please refresh and try again.</p></div>';
+            if (area) area.innerHTML = '<div class="directory-empty"><strong>Unable to load contacts</strong><p>Directory error: ' + esc(error.message || 'Unknown error') + '</p></div>';
         }
     }
 
@@ -146,7 +152,9 @@
         const originalOpenService = window.app.openService.bind(window.app);
         window.app.openService = function(service) {
             if (service === 'sellers' || service === 'buyers') {
-                openDirectory(service === 'sellers' ? 'seller' : 'buyer', '', true);
+                if (standaloneStarted) return;
+                standaloneStarted = true;
+                openDirectory(service === 'sellers' ? 'seller' : 'buyer', '', false);
                 return;
             }
             return originalOpenService(service);
@@ -165,15 +173,31 @@
         return true;
     }
 
-    function boot() {
-        if (install()) {
-            const qs = new URL(location.href).searchParams;
-            const id = Number(qs.get(directoryType + '_id') || 0);
-            const district = qs.get('district_id') || '';
-            if (id) setTimeout(function(){ loadAll(directoryType).then(function(rows){ const row = rows.find(r => Number(r.id) === id); if (row) openDetail(row, directoryType, false, district); else openDirectory(directoryType, district, false); }); }, 0);
+    async function boot() {
+        if (!install()) {
+            setTimeout(boot, 25);
             return;
         }
-        setTimeout(boot, 25);
+
+        if (standaloneStarted) return;
+        standaloneStarted = true;
+
+        const qs = new URL(location.href).searchParams;
+        const id = Number(qs.get(directoryType + '_id') || 0);
+        const district = qs.get('district_id') || '';
+
+        if (id) {
+            try {
+                const rows = await loadAll(directoryType);
+                const row = rows.find(r => Number(r.id) === id);
+                if (row) openDetail(row, directoryType, false, district);
+                else await openDirectory(directoryType, district, false);
+            } catch (error) {
+                await openDirectory(directoryType, district, false);
+            }
+        } else {
+            await openDirectory(directoryType, district, false);
+        }
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
@@ -186,7 +210,7 @@
         const qs = new URL(location.href).searchParams;
         const id = Number(qs.get(directoryType + '_id') || 0);
         const district = qs.get('district_id') || '';
-        if (id) loadAll(directoryType).then(function(rows){ const row = rows.find(r => Number(r.id) === id); if (row) openDetail(row, directoryType, false, district); });
+        if (id) loadAll(directoryType).then(function(rows){ const row = rows.find(r => Number(r.id) === id); if (row) openDetail(row, directoryType, false, district); else openDirectory(directoryType, district, false); });
         else openDirectory(directoryType, district, false);
     });
 })();
