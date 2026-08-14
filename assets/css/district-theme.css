@@ -1,0 +1,27 @@
+/* AgroBusiness Malawi — district picker cosmetics
+   Keep region selection agricultural and neutral; remove the accidental
+   dark-brown region treatment from district tables/cards. */
+
+.overview-badge.mono.r-north,
+.overview-badge.mono.r-central,
+.overview-badge.mono.r-south,
+.overview-badge.mono {
+    background: linear-gradient(135deg, #6f9d54 0%, #8fb66f 100%) !important;
+    color: #fff !important;
+    box-shadow: 0 3px 8px rgba(79, 122, 56, 0.18) !important;
+}
+
+.overview-item:hover .overview-badge.mono {
+    background: linear-gradient(135deg, #5f8f48 0%, #7fa85f 100%) !important;
+}
+
+.overview-item.is-selected .overview-badge.mono {
+    background: rgba(255,255,255,.22) !important;
+    box-shadow: none !important;
+}
+
+/* Keep district table/picker headers neutral rather than brown-heavy. */
+.data-table thead th,
+.district-region-header {
+    color: #4f7a38;
+}
