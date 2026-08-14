@@ -15,13 +15,13 @@ $service = $service ?? null;
         function close() { const n=nav(); if(!n)return; n.classList.remove('open'); n.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
         document.addEventListener('click', function(e){ if(e.target.closest('.nav-toggle')){e.preventDefault();open();return;} if(e.target.closest('[data-nav-close]')) close(); });
         document.addEventListener('keydown', function(e){ if(e.key==='Escape') close(); });
-        document.addEventListener('DOMContentLoaded', function(){ const here=(location.pathname.split('/').pop()||'index.php'); document.querySelectorAll('#app-nav .app-nav-link').forEach(function(a){const key=a.getAttribute('data-nav');if((here===''||here==='index.php')?key==='home':key===here)a.classList.add('is-current');}); });
+        document.addEventListener('DOMContentLoaded', function(){ const here=(location.pathname.split('/').pop()||'index.php'); document.querySelectorAll('#app-nav .app-nav-link').forEach(function(a){const key=a.getAttribute('data-nav');if((here===''||here==='index.php')?key==='home':key===here)a.classList.add('is-current'); }); });
     })();
 </script>
 <!-- Directory navigation must register BEFORE app.js boots standalone function pages. -->
-<script src="assets/js/directory-navigation.js?v=20260814-2305"></script>
+<script src="assets/js/directory-navigation.js?v=20260814-2315"></script>
 <script src="assets/js/app.js" defer></script>
-<script src="assets/js/directory-home-hook.js?v=20260814-2305"></script>
+<script src="assets/js/directory-home-hook.js?v=20260814-2315"></script>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/sortable-table.js" defer></script>
 <script src="assets/js/price-report-story.js" defer></script>
