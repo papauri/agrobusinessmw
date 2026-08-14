@@ -1,7 +1,8 @@
 -- AgroBusiness Malawi: CANONICAL price-location migration
--- This is the ONE migration for price markets, price areas and optional email.
--- It is self-contained and does not depend on another location migration.
--- Run once against the AgroBusiness database.
+-- ONE migration for price markets, price areas and optional price-report location.
+-- Safe for the current database state: market_id and email already exist;
+-- area_id is the remaining location column to add.
+-- Run this file once against p601229_AgroBusiness_MW.
 
 START TRANSACTION;
 
@@ -28,20 +29,22 @@ CREATE TABLE IF NOT EXISTS price_areas (
   KEY idx_price_area_district (district_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Existing installations may already contain these columns. The ALTERs are
--- intentionally written for a fresh installation; if the columns already
--- exist, skip those three ALTER statements before running this file.
+-- Existing database already has district_id, market_id and email.
+-- Only add the missing area_id column.
 ALTER TABLE crowdsourced_prices
   MODIFY district_id INT NULL,
-  ADD COLUMN market_id INT UNSIGNED NULL AFTER district_id,
-  ADD COLUMN area_id INT UNSIGNED NULL AFTER market_id,
-  ADD COLUMN email VARCHAR(255) NULL AFTER area_id,
-  ADD KEY idx_cp_market (market_id),
-  ADD KEY idx_cp_area (area_id),
-  ADD KEY idx_cp_email (email);
+  ADD COLUMN area_id INT UNSIGNED NULL AFTER market_id;
 
--- Markets: major markets, trading centres and farmer-used market names
--- distributed across all 29 districts represented by the application.
+-- Add the lookup indexes only when they are absent. These statements use
+-- MySQL/MariaDB's IF NOT EXISTS form; no information_schema access is needed.
+ALTER TABLE crowdsourced_prices
+  ADD INDEX IF NOT EXISTS idx_cp_area (area_id);
+ALTER TABLE crowdsourced_prices
+  ADD INDEX IF NOT EXISTS idx_cp_market (market_id);
+ALTER TABLE crowdsourced_prices
+  ADD INDEX IF NOT EXISTS idx_cp_email (email);
+
+-- Markets across all 29 districts represented by the application.
 INSERT IGNORE INTO price_markets (district_id,name) VALUES
 (1,'Lilongwe Market'),(1,'Area 2 Market'),(1,'Old Town Market'),(1,'Kawale Market'),(1,'Kanengo Market'),(1,'Area 25 Market'),(1,'Lumbadzi Market'),(1,'Mitundu Market'),
 (2,'Blantyre Market'),(2,'Limbe Market'),(2,'Ndirande Market'),(2,'Bangwe Market'),(2,'Chigumula Market'),(2,'Chirimba Market'),(2,'Kachere Market'),(2,'Manase Market'),(2,'Misesa Market'),(2,'Mpingwe Market'),
@@ -73,8 +76,8 @@ INSERT IGNORE INTO price_markets (district_id,name) VALUES
 (28,'Neno Market'),(28,'Lisungwi Market'),(28,'Zalewa Market'),
 (29,'Nsanje Market'),(29,'Bangula Market'),(29,'Thundu Market'),(29,'Marka Market');
 
--- Areas/localities: urban neighbourhoods plus district headquarters and
--- recognised trading/locality names. Every district gets coverage.
+-- Areas/localities across every district. Market and area are deliberately
+-- separate concepts: either, both, or neither may be selected.
 INSERT IGNORE INTO price_areas (district_id,name,city_name) VALUES
 (1,'Area 1','Lilongwe City'),(1,'Area 2','Lilongwe City'),(1,'Area 3','Lilongwe City'),(1,'Area 4','Lilongwe City'),(1,'Area 5','Lilongwe City'),(1,'Area 6','Lilongwe City'),(1,'Area 7','Lilongwe City'),(1,'Area 8','Lilongwe City'),(1,'Area 9','Lilongwe City'),(1,'Area 10','Lilongwe City'),(1,'Area 11','Lilongwe City'),(1,'Area 12','Lilongwe City'),(1,'Area 13','Lilongwe City'),(1,'Area 14','Lilongwe City'),(1,'Area 15','Lilongwe City'),(1,'Area 16','Lilongwe City'),(1,'Area 17','Lilongwe City'),(1,'Area 18','Lilongwe City'),(1,'Area 19','Lilongwe City'),(1,'Area 20','Lilongwe City'),(1,'Area 21','Lilongwe City'),(1,'Area 22','Lilongwe City'),(1,'Area 23','Lilongwe City'),(1,'Area 24','Lilongwe City'),(1,'Area 25','Lilongwe City'),(1,'Area 26','Lilongwe City'),(1,'Area 27','Lilongwe City'),(1,'Area 28','Lilongwe City'),(1,'Area 29','Lilongwe City'),(1,'Area 30','Lilongwe City'),(1,'Area 31','Lilongwe City'),(1,'Area 32','Lilongwe City'),(1,'Area 33','Lilongwe City'),(1,'Area 34','Lilongwe City'),(1,'Area 35','Lilongwe City'),(1,'Area 36','Lilongwe City'),(1,'Area 37','Lilongwe City'),(1,'Area 38','Lilongwe City'),(1,'Area 39','Lilongwe City'),(1,'Area 40','Lilongwe City'),(1,'Area 41','Lilongwe City'),(1,'Area 42','Lilongwe City'),(1,'Area 43','Lilongwe City'),(1,'Area 44','Lilongwe City'),(1,'Area 45','Lilongwe City'),(1,'Area 46','Lilongwe City'),(1,'Area 47','Lilongwe City'),(1,'Area 48','Lilongwe City'),(1,'Area 49','Lilongwe City'),(1,'Area 50','Lilongwe City'),(1,'Area 51','Lilongwe City'),(1,'Area 52','Lilongwe City'),(1,'Area 53','Lilongwe City'),(1,'Area 54','Lilongwe City'),(1,'Area 55','Lilongwe City'),(1,'Area 56','Lilongwe City'),(1,'Area 57','Lilongwe City'),(1,'Area 58','Lilongwe City'),
 (2,'Soche','Blantyre City'),(2,'Limbe','Blantyre City'),(2,'Chichiri','Blantyre City'),(2,'Kachere','Blantyre City'),(2,'Bangwe','Blantyre City'),(2,'Ndirande','Blantyre City'),(2,'Nyambadwe','Blantyre City'),(2,'Namiwawa','Blantyre City'),(2,'Chilomoni','Blantyre City'),(2,'Mbayani','Blantyre City'),(2,'Chirimba','Blantyre City'),(2,'Kameza','Blantyre City'),(2,'Ngumbe','Blantyre City'),(2,'Chileka','Blantyre City'),(2,'Lunzu','Blantyre City'),
@@ -106,8 +109,7 @@ INSERT IGNORE INTO price_areas (district_id,name,city_name) VALUES
 (28,'Neno Boma',NULL),(28,'Lisungwi',NULL),(28,'Dzaone',NULL),(28,'Kanono',NULL),(28,'Zalewa',NULL),
 (29,'Nsanje Boma',NULL),(29,'Bangula',NULL),(29,'Thundu',NULL),(29,'Mankhokwe',NULL),(29,'Marka',NULL);
 
--- Future-proof coverage: if the database contains another district,
--- give it at least one selectable area without inventing a market.
+-- Guarantee coverage for any district that is added later.
 INSERT IGNORE INTO price_areas (district_id,name,city_name)
 SELECT d.id, CONCAT(d.name,' Boma'), NULL
 FROM districts d
@@ -116,7 +118,6 @@ WHERE pa.id IS NULL;
 
 COMMIT;
 
--- Verification
 SELECT COUNT(*) AS market_count FROM price_markets;
 SELECT COUNT(*) AS area_count FROM price_areas;
 SELECT d.id,d.name
