@@ -2723,40 +2723,56 @@ class AgroBusinessRevolution {
 
     showCropDetails(cropName) {
         const area = document.getElementById('content-area');
-        if (area) {
-            area.innerHTML = `
+        if (!area) return;
+
+        const safeCrop = escapeHtml(cropName);
+        area.innerHTML = `
                 <div style="text-align: center; padding: 3rem;">
-                    <h2 style="margin-bottom: 2rem; color: var(--primary);">${this.getCropIcon(cropName)} ${cropName} Details</h2>
-                    <p style="margin-bottom: 3rem; color: var(--text-secondary);">Learn more about ${cropName}</p>
+                    <h2 style="margin-bottom: 2rem; color: var(--primary);">${this.getCropIcon(cropName)} ${safeCrop} Details</h2>
+                    <p style="margin-bottom: 3rem; color: var(--text-secondary);">Learn more about ${safeCrop}</p>
 
                     <div class="services-grid" style="max-width: 800px; margin: 0 auto;">
-                        <div class="service-card" onclick="app.loadCropPrices('${cropName}')" style="cursor: pointer;">
+                        <div class="service-card" data-crop-action="prices" style="cursor: pointer;">
                             <div class="service-icon-3d">💰</div>
                             <div class="service-content-modern">
                                 <h3>Price History</h3>
-                                <p>Historical pricing for ${cropName}</p>
+                                <p>Historical pricing for ${safeCrop}</p>
                             </div>
                         </div>
 
-                        <div class="service-card" onclick="app.getCropFarmingTips('${cropName}')" style="cursor: pointer;">
+                        <div class="service-card" data-crop-action="tips" style="cursor: pointer;">
                             <div class="service-icon-3d">🌾</div>
                             <div class="service-content-modern">
                                 <h3>Growing Guide</h3>
-                                <p>Best practices for ${cropName}</p>
+                                <p>Best practices for ${safeCrop}</p>
                             </div>
                         </div>
 
-                        <div class="service-card" onclick="app.getCropMarkets('${cropName}')" style="cursor: pointer;">
+                        <div class="service-card" data-crop-action="markets" style="cursor: pointer;">
                             <div class="service-icon-3d">🏪</div>
                             <div class="service-content-modern">
                                 <h3>Find Markets</h3>
-                                <p>Where to sell ${cropName}</p>
+                                <p>Where to sell ${safeCrop}</p>
                             </div>
                         </div>
                     </div>
                 </div>
             `;
-        }
+
+        // Bind the cards after render rather than interpolating the crop name into an
+        // inline handler attribute. The browser HTML-decodes an attribute before the JS
+        // parser sees its contents, so escaping cannot make a value safe inside a JS
+        // string literal in markup. The closures below carry the raw value instead, so
+        // nothing crop-derived reaches the markup at all.
+        const cardHandlers = {
+            prices: () => this.loadCropPrices(cropName),
+            tips: () => this.getCropFarmingTips(cropName),
+            markets: () => this.getCropMarkets(cropName)
+        };
+        area.querySelectorAll('[data-crop-action]').forEach(card => {
+            const handler = cardHandlers[card.dataset.cropAction];
+            if (handler) card.addEventListener('click', handler);
+        });
     }
 
     getCropFarmingTips(cropName) {
