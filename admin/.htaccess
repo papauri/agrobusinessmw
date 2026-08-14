@@ -1,0 +1,9 @@
+DirectoryIndex gateway.php
+
+RewriteEngine On
+
+# Route the admin entry point and direct index.php requests through the
+# identity-aware authentication gateway. Internal includes of index.php are not
+# HTTP requests and therefore do not recurse through this rule.
+RewriteRule ^$ gateway.php [L]
+RewriteRule ^index\.php$ gateway.php [L]
