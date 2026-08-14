@@ -19,9 +19,9 @@ $service = $service ?? null;
     })();
 </script>
 <!-- Directory navigation must register BEFORE app.js boots standalone function pages. -->
-<script src="assets/js/directory-navigation.js?v=20260814-2255"></script>
+<script src="assets/js/directory-navigation.js?v=20260814-2305"></script>
 <script src="assets/js/app.js" defer></script>
-<script src="assets/js/directory-home-hook.js?v=20260814-2255"></script>
+<script src="assets/js/directory-home-hook.js?v=20260814-2305"></script>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/sortable-table.js" defer></script>
 <script src="assets/js/price-report-story.js" defer></script>
