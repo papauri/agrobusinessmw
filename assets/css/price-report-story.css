@@ -1,0 +1,176 @@
+/* Agricultural price-report journey: paper + pencil field-notebook language. */
+.price-report-story {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.3fr);
+    gap: 1.25rem;
+    margin: 0 0 1.25rem;
+    padding: 1.25rem;
+    background:
+        linear-gradient(rgba(82,72,59,.025) 1px, transparent 1px),
+        #f5f0e5;
+    background-size: 100% 22px;
+    border: 1px solid #d7cebd;
+    box-shadow: 2px 3px 0 rgba(72,61,48,.08), inset 0 0 0 1px rgba(255,255,255,.45);
+    overflow: hidden;
+    transition: opacity .25s ease, transform .28s ease, max-height .28s ease, padding .28s ease;
+    font-family: Georgia, 'Times New Roman', serif;
+}
+
+.price-report-story::before,
+.price-report-story::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    opacity: .42;
+}
+.price-report-story::before {
+    inset: 7px;
+    border: 1px dashed rgba(92,78,60,.2);
+}
+.price-report-story::after {
+    width: 90px;
+    height: 90px;
+    right: -32px;
+    top: -34px;
+    border-radius: 50%;
+    border: 1px solid rgba(139,115,85,.28);
+    box-shadow: 0 0 0 10px rgba(139,115,85,.035), 0 0 0 20px rgba(139,115,85,.025);
+}
+
+.price-story-art {
+    min-height: 230px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.price-story-sketch {
+    width: min(100%, 330px);
+    height: auto;
+    overflow: visible;
+}
+.price-story-sketch path,
+.price-story-sketch circle {
+    fill: none;
+    stroke: #4f473c;
+    stroke-width: 1.45;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: .75;
+}
+.price-story-sketch path:nth-child(4),
+.price-story-sketch path:nth-child(5) {
+    stroke-width: 1.05;
+    opacity: .55;
+}
+
+.price-story-copy { position: relative; z-index: 1; }
+.price-story-eyebrow {
+    margin: 0 0 .25rem;
+    color: #8a7357;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+.price-story-copy h2 {
+    margin: 0 0 .45rem;
+    color: #332e27;
+    font-size: clamp(1.45rem, 3vw, 2.15rem);
+    font-weight: 400;
+    line-height: 1.08;
+}
+.price-story-intro {
+    margin: 0 0 1rem;
+    max-width: 62ch;
+    color: #655d52;
+    font-size: .86rem;
+    line-height: 1.6;
+}
+
+.price-story-path {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .65rem;
+}
+.price-story-step {
+    display: grid;
+    grid-template-columns: 31px 1fr;
+    gap: .55rem;
+    padding: .6rem .55rem;
+    background: rgba(255,255,255,.28);
+    border-top: 1px solid rgba(99,84,66,.16);
+}
+.price-story-number {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(79,71,60,.4);
+    border-radius: 50%;
+    color: #665b4c;
+    font-size: .66rem;
+    transform: rotate(-5deg);
+}
+.price-story-step:nth-child(even) .price-story-number { transform: rotate(5deg); }
+.price-story-step h3 {
+    margin: .05rem 0 .15rem;
+    color: #3e3830;
+    font-size: .82rem;
+    font-weight: 700;
+}
+.price-story-step p {
+    margin: 0;
+    color: #71685b;
+    font-size: .72rem;
+    line-height: 1.45;
+}
+
+.price-story-approval {
+    display: flex;
+    align-items: flex-start;
+    gap: .55rem;
+    margin-top: .85rem;
+    padding: .7rem .75rem;
+    border-left: 3px solid #8b7355;
+    background: rgba(139,115,85,.08);
+    color: #4e463b;
+}
+.price-story-approval .material-symbols-rounded { font-size: 1.05rem; color: #786247; margin-top: 1px; }
+.price-story-approval p { margin: 0; font-size: .75rem; line-height: 1.5; }
+.price-story-promise {
+    margin: .8rem 0 .6rem;
+    color: #62584b;
+    font-size: .76rem;
+    font-style: italic;
+    line-height: 1.45;
+}
+.price-story-dismiss {
+    appearance: none;
+    border: 1px solid rgba(79,71,60,.35);
+    background: transparent;
+    color: #544b3f;
+    padding: .48rem .8rem;
+    cursor: pointer;
+    font: inherit;
+    font-size: .7rem;
+    border-radius: 2px;
+}
+.price-story-dismiss:hover { background: rgba(255,255,255,.35); }
+.price-report-story.is-collapsed { opacity: 0; transform: translateY(-8px); max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0; }
+
+@media (max-width: 760px) {
+    .price-report-story { grid-template-columns: 1fr; gap: .35rem; padding: 1rem; }
+    .price-story-art { min-height: 125px; max-height: 145px; }
+    .price-story-sketch { width: min(76%, 260px); }
+}
+@media (max-width: 480px) {
+    .price-story-path { grid-template-columns: 1fr; }
+    .price-story-art { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .price-report-story { transition: none; }
+}
