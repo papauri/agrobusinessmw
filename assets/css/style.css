@@ -2106,6 +2106,18 @@ button.overview-item {
     color: #8a6d1e;
 }
 
+/* Unit suffix inside a price badge. Deliberately quieter than the figure it
+   qualifies — it must be readable, but it should never compete with the price
+   for attention. Inherits the badge's colour so it stays legible on both the
+   default and .price-high backgrounds. */
+.price-badge .price-unit {
+    margin-left: 0.3rem;
+    font-size: 0.72em;
+    font-weight: 500;
+    opacity: 0.75;
+    white-space: nowrap;
+}
+
 .price-filters {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

@@ -2427,24 +2427,33 @@ class AgroBusinessRevolution {
             const cropOptions = allCrops.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
             const cropFilterOptions = allCrops.map(c => `<option value="${esc(c.name.toLowerCase())}">${esc(c.name)}</option>`).join('');
 
+            // A bag is 50kg by default across the platform. This mirrors $BAG_KG in
+            // api.php (the server uses the same constant to convert a per-bag report
+            // into a per-kg price), so the two must be changed together.
+            const BAG_KG = 50;
+            // Appended inside a price badge so the number is never ambiguous: every
+            // headline price in this table is per kilogram, with the bag equivalent
+            // spelled out underneath.
+            const perKg = '<small class="price-unit">per kg</small>';
+
             const priceRows = rows.map((r, i) => {
                 const searchText = [r.sourceLabel, r.crop_name, r.district, r.market, r.type, r.fewsPrice || '', r.communityPrice || '', r.reports, r.unit].join(' ').toLowerCase();
 
                 const fewsNum = r.fews_price_num ?? null;
-                const fewsPer50Display = fewsNum ? `Bag: MK ${Math.round(fewsNum * 50).toLocaleString()}` : '';
+                const fewsPer50Display = fewsNum ? `${BAG_KG}kg bag: MK ${Math.round(fewsNum * BAG_KG).toLocaleString()}` : '';
                 const fewsDisplay = fewsNum ? fmt(fewsNum) : (r.fewsPrice || '—');
 
                 const communityMin = r.community_min_num ?? null;
                 const communityAvg = r.community_avg_num ?? null;
                 const communityMax = r.community_max_num ?? null;
-                const communityMinBag = r.community_min_bag ?? (communityMin ? Math.round(communityMin * 50) : null);
-                const communityAvgBag = r.community_avg_bag ?? (communityAvg ? Math.round(communityAvg * 50) : null);
-                const communityMaxBag = r.community_max_bag ?? (communityMax ? Math.round(communityMax * 50) : null);
+                const communityMinBag = r.community_min_bag ?? (communityMin ? Math.round(communityMin * BAG_KG) : null);
+                const communityAvgBag = r.community_avg_bag ?? (communityAvg ? Math.round(communityAvg * BAG_KG) : null);
+                const communityMaxBag = r.community_max_bag ?? (communityMax ? Math.round(communityMax * BAG_KG) : null);
 
                 const communityDisplay = (communityMin || communityAvg || communityMax) ?
                     `${communityMin ? fmt(communityMin) : '—'} / ${communityAvg ? fmt(communityAvg) : '—'} / ${communityMax ? fmt(communityMax) : '—'}` : (r.communityPrice || '—');
                 const communityBagDisplay = (communityMinBag || communityAvgBag || communityMaxBag) ?
-                    `Bag: ${communityMinBag ? 'MK ' + communityMinBag.toLocaleString() : '—'} / ${communityAvgBag ? 'MK ' + communityAvgBag.toLocaleString() : '—'} / ${communityMaxBag ? 'MK ' + communityMaxBag.toLocaleString() : '—'}` : '';
+                    `${BAG_KG}kg bag: ${communityMinBag ? 'MK ' + communityMinBag.toLocaleString() : '—'} / ${communityAvgBag ? 'MK ' + communityAvgBag.toLocaleString() : '—'} / ${communityMaxBag ? 'MK ' + communityMaxBag.toLocaleString() : '—'}` : '';
 
                 // Price level: community average vs AgroBiz reference rate (±15% band).
                 let priceLevelBadge = '';
@@ -2470,8 +2479,8 @@ class AgroBusinessRevolution {
                 <tr class="price-data-row" data-source="${esc(r.source)}" data-crop="${esc((r.crop_name || '').toLowerCase())}" data-district="${esc((r.district || '').toLowerCase())}" data-search="${esc(searchText)}" style="animation:serviceReveal .3s ease ${i * .03}s both">
                     <td data-sort-value="${esc(r.crop_name || '')}"><span style="font-size:1.3rem">${this.getCropIcon(r.crop_name)}</span> <strong>${esc(r.crop_name || 'Unknown crop')}</strong><br><small style="color:var(--text-muted)">${esc(r.type)}</small></td>
                     <td data-sort-value="${esc(r.district || '')}">${esc(r.district)}<br><small style="color:var(--text-muted)">${esc(r.market)}</small></td>
-                    <td data-sort-value="${fewsNum ?? ''}"><span class="price-badge ${r.source === 'fews' ? 'price-high' : ''}">${esc(fewsDisplay)}</span><div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">${esc(fewsPer50Display)}</div></td>
-                    <td data-sort-value="${communityAvg ?? communityMin ?? ''}"><span class="price-badge ${r.source === 'community' ? 'price-high' : ''}">${esc(communityDisplay)}</span>${priceLevelBadge}${confirmedChip}<div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">${esc(communityBagDisplay)}</div></td>
+                    <td data-sort-value="${fewsNum ?? ''}"><span class="price-badge ${r.source === 'fews' ? 'price-high' : ''}">${esc(fewsDisplay)}${fewsNum ? perKg : ''}</span><div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">${esc(fewsPer50Display)}</div></td>
+                    <td data-sort-value="${communityAvg ?? communityMin ?? ''}"><span class="price-badge ${r.source === 'community' ? 'price-high' : ''}">${esc(communityDisplay)}${hasCommunity ? perKg : ''}</span>${priceLevelBadge}${confirmedChip}<div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">${esc(communityBagDisplay)}</div></td>
                     <td>${esc(r.unit)}</td>
                     <td data-sort-value="${r._ts || 0}" style="color:var(--text-muted);font-size:.8rem">${esc(r.reports)}</td>
                     <td data-sort-value="${esc(r.sourceLabel || '')}"><span class="price-badge" style="background:${r.source === 'fews' ? 'rgba(139,115,85,.14)' : 'rgba(200,164,90,.16)'};color:${r.source === 'fews' ? 'var(--primary)' : 'var(--accent-dark)'}">${esc(r.sourceLabel)}</span></td>
@@ -2517,7 +2526,7 @@ class AgroBusinessRevolution {
                     <div class="table-wrap" style="overflow-x:auto">
                     <table class="data-table sortable" id="price-combined-table">
                         <thead><tr>
-                            <th>Crop</th><th>Location</th><th>AgroBiz Rate</th><th>Community Range</th><th>Unit</th><th>Date</th><th>Source</th>
+                            <th>Crop</th><th>Location</th><th>AgroBiz Rate <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>Community Range <small style="font-weight:400;color:var(--text-muted)">(per kg, min/avg/max)</small></th><th>Unit</th><th>Date</th><th>Source</th>
                         </tr></thead>
                         <tbody>
                             ${priceRows || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">No price data yet.</td></tr>`}
@@ -2555,13 +2564,13 @@ class AgroBusinessRevolution {
                             <small class="pr-hint">Choose an existing market or type a new one.</small>
                         </div>
                         <div class="form-group">
-                            <label>Price — enter per kg <em>or</em> per bag *</label>
+                            <label>Price — enter per kg <em>or</em> per 50kg bag *</label>
                             <div class="pr-price-row">
                                 <input type="number" id="pr-price-kg" min="1" max="99999" step="1" placeholder="Per kg (MWK)">
                                 <span class="pr-price-or">or</span>
                                 <input type="number" id="pr-price-bag" min="1" max="9999999" step="1" placeholder="Per 50kg bag (MWK)">
                             </div>
-                            <small class="pr-hint">Fill in whichever you know — we work out the other automatically.</small>
+                            <small class="pr-hint">Fill in whichever you know — we work out the other automatically, counting a bag as 50kg.</small>
                         </div>
                         <div class="form-group">
                             <label>Your Phone (registered) *</label>
