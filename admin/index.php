@@ -186,8 +186,131 @@ $db->query("CREATE TABLE IF NOT EXISTS price_overrides (
   UNIQUE KEY uniq_crop_district (crop_id, district_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci");
 
+// ─── APPLICANT → DIRECTORY PROMOTION ──────────────────────────────────────────
+/**
+ * Promote an approved applicant into the public directory tables.
+ *
+ *   user_type = 'seller' → INSERT seller_contact_details, then sellers
+ *   user_type = 'buyer'  → INSERT buyer_contact_details,  then buyers
+ *   user_type = 'farmer' → deliberate NO-OP, see the branch below
+ *
+ * MUST be called from inside the caller's transaction. The contact row and the
+ * directory row have to land together (a failure between them leaves an orphan
+ * contact row forever), and they have to land together with the status UPDATE —
+ * otherwise an applicant ends up 'approved' and emailed but absent from the
+ * directory, which is exactly the bug this function exists to close.
+ *
+ * Throws RuntimeException on any failure so the caller rolls everything back and
+ * can surface the reason to the admin. Returns the directory table the applicant
+ * was added to, or '' when nothing was promoted.
+ */
+function admin_promote_applicant(mysqli $db, array $app): string
+{
+    $userType = (string)($app['user_type'] ?? '');
+
+    // ── farmer (and anything that is not a seller/buyer) — EXPLICIT NO-OP, BY
+    //    DESIGN. Do NOT "fix" this by adding a farmers table insert: farmers have
+    //    no directory table of their own, and their approval is tracked in
+    //    onboarding_applications only. This branch is intentional, not an
+    //    oversight — it mirrors the same decision in the API's old admin_review.
+    if ($userType !== 'seller' && $userType !== 'buyer') {
+        return '';
+    }
+
+    // ── district_id is validated here rather than left to MySQL to decide.
+    //    `sellers`.district_id and `buyers`.district_id are `int NOT NULL` with an
+    //    FK to districts(id) (p601229_AgroBusiness_MW.sql:475/851 for sellers,
+    //    :58/800 for buyers), and an application can carry a null or stale
+    //    district. Without this check a null silently becomes 0 and the INSERT
+    //    dies on the FK with an opaque error mid-transaction.
+    $districtId = isset($app['district_id']) && $app['district_id'] !== null ? (int)$app['district_id'] : 0;
+    if ($districtId <= 0) {
+        throw new RuntimeException('the application has no district on file, so it cannot be listed in the directory');
+    }
+    $dStmt = $db->prepare("SELECT id FROM districts WHERE id = ?");
+    if (!$dStmt) {
+        throw new RuntimeException('the district check could not be prepared');
+    }
+    $dStmt->bind_param('i', $districtId);
+    $foundDistrict = 0;
+    $dOk = $dStmt->execute();
+    if ($dOk) {
+        $dStmt->bind_result($foundDistrict);
+        $dStmt->fetch();
+    }
+    $dStmt->close();
+    if (!$dOk || (int)$foundDistrict !== $districtId) {
+        throw new RuntimeException("district #{$districtId} on the application does not exist");
+    }
+
+    $name    = (string)($app['full_name'] ?? '');
+    $phone   = $app['phone_number'] ?? null;
+    $email   = $app['email'] ?? null;
+    $address = $app['village'] ?? '';   // village is the applicant's address line
+
+    // Both branches spell their SQL out in full literals. Nothing is interpolated
+    // into a statement — not even the table name — so there is no path from any
+    // applicant value into the SQL text.
+    if ($userType === 'seller') {
+        $cStmt = $db->prepare("INSERT INTO seller_contact_details (phone_number, email, address) VALUES (?,?,?)");
+        if (!$cStmt) {
+            throw new RuntimeException('the seller contact insert could not be prepared');
+        }
+        $cStmt->bind_param('sss', $phone, $email, $address);
+        $cOk = $cStmt->execute();
+        $cStmt->close();
+        if (!$cOk) {
+            throw new RuntimeException('the seller contact row could not be saved');
+        }
+        $contactId = (int)$db->insert_id;
+        if ($contactId <= 0) {
+            throw new RuntimeException('the seller contact row returned no id');
+        }
+
+        $sStmt = $db->prepare("INSERT INTO sellers (name, district_id, contact_id) VALUES (?,?,?)");
+        if (!$sStmt) {
+            throw new RuntimeException('the seller insert could not be prepared');
+        }
+        $sStmt->bind_param('sii', $name, $districtId, $contactId);
+        $sOk = $sStmt->execute();
+        $sStmt->close();
+        if (!$sOk) {
+            throw new RuntimeException('the seller directory row could not be saved');
+        }
+        return 'sellers';
+    }
+
+    $cStmt = $db->prepare("INSERT INTO buyer_contact_details (phone_number, email, address) VALUES (?,?,?)");
+    if (!$cStmt) {
+        throw new RuntimeException('the buyer contact insert could not be prepared');
+    }
+    $cStmt->bind_param('sss', $phone, $email, $address);
+    $cOk = $cStmt->execute();
+    $cStmt->close();
+    if (!$cOk) {
+        throw new RuntimeException('the buyer contact row could not be saved');
+    }
+    $contactId = (int)$db->insert_id;
+    if ($contactId <= 0) {
+        throw new RuntimeException('the buyer contact row returned no id');
+    }
+
+    $bStmt = $db->prepare("INSERT INTO buyers (name, district_id, contact_id) VALUES (?,?,?)");
+    if (!$bStmt) {
+        throw new RuntimeException('the buyer insert could not be prepared');
+    }
+    $bStmt->bind_param('sii', $name, $districtId, $contactId);
+    $bOk = $bStmt->execute();
+    $bStmt->close();
+    if (!$bOk) {
+        throw new RuntimeException('the buyer directory row could not be saved');
+    }
+    return 'buyers';
+}
+
 // ─── HANDLE APPROVE / DENY ────────────────────────────────────────────────────
 $actionMsg = '';
+$actionErr = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_valid()) {
     $id     = (int)$_POST['review_id'];
     $action = $_POST['review_action'] ?? '';
@@ -198,24 +321,97 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
         $denial = $action === 'deny' ? $notes : null;
         $aNote  = $action === 'approve' ? $notes : null;
 
-        $stmt = $db->prepare(
-            "UPDATE onboarding_applications SET status=?, admin_notes=?, denial_reason=?, reviewed_at=NOW() WHERE id=?"
-        );
-        $stmt->bind_param('sssi', $status, $aNote, $denial, $id);
-        $stmt->execute();
+        $app        = null;
+        $promotedTo = '';
+        $committed  = false;
 
-        // Fetch for notification
-        $s2 = $db->prepare("SELECT full_name, email, application_ref FROM onboarding_applications WHERE id=?");
-        $s2->bind_param('i', $id);
-        $s2->execute();
-        // No get_result(): mysqlnd is not guaranteed on the host. Bind + fetch instead.
-        $s2->bind_result($fullName, $email, $appRef);
-        $app = $s2->fetch()
-            ? ['full_name' => $fullName, 'email' => $email, 'application_ref' => $appRef]
-            : null;
-        $s2->close();
+        // One transaction covers the whole decision: read the applicant, promote
+        // them into the directory, THEN write the status. Ordering matters as much
+        // as the transaction does — the status UPDATE is the LAST statement, so a
+        // failed promotion aborts before anyone is marked approved. (That ordering
+        // also holds if onboarding_applications should turn out to be a
+        // non-transactional engine, which the schema of record does not state.)
+        // No mail is sent until the commit succeeds.
+        try {
+            $db->begin_transaction();
 
-        if ($app && $app['email']) {
+            // Read BEFORE the UPDATE — we need the applicant's *current* status to
+            // decide whether this is a genuine transition, plus the columns the
+            // promotion needs. FOR UPDATE locks the row so two concurrent approvals
+            // of the same id serialise here instead of both seeing 'pending'.
+            $s2 = $db->prepare(
+                "SELECT full_name, email, application_ref, user_type, phone_number, district_id, village, status
+                 FROM onboarding_applications WHERE id=? FOR UPDATE"
+            );
+            if (!$s2) {
+                throw new RuntimeException('the applicant lookup could not be prepared');
+            }
+            $s2->bind_param('i', $id);
+            if (!$s2->execute()) {
+                throw new RuntimeException('the applicant lookup failed');
+            }
+            // No get_result(): mysqlnd is not guaranteed on the host. Bind + fetch
+            // instead. The bind_result list below matches the SELECT list above
+            // one-for-one, in order — 8 columns, 8 variables.
+            $s2->bind_result($fullName, $email, $appRef, $userType, $phoneNumber, $districtId, $village, $currentStatus);
+            $app = $s2->fetch()
+                ? [
+                    'full_name'       => $fullName,
+                    'email'           => $email,
+                    'application_ref' => $appRef,
+                    'user_type'       => $userType,
+                    'phone_number'    => $phoneNumber,
+                    'district_id'     => $districtId,
+                    'village'         => $village,
+                    'status'          => $currentStatus,
+                  ]
+                : null;
+            $s2->close();
+
+            if ($app === null) {
+                throw new RuntimeException('no application with that id exists');
+            }
+
+            // Double-promotion guard. The guard chosen is the STATUS TRANSITION:
+            // promote only when the row was not already 'approved'. Reason: the
+            // directory tables carry no back-reference to the application (see
+            // `sellers` — id/name/district_id/contact_id only), so an "is there
+            // already a directory row?" check could only guess by matching on name
+            // or phone, which is fuzzy and would wrongly block genuine namesakes.
+            // The application's own status is authoritative, and reading it under
+            // FOR UPDATE inside this transaction makes the check race-safe.
+            if ($action === 'approve' && $app['status'] !== 'approved') {
+                $promotedTo = admin_promote_applicant($db, $app);
+            }
+
+            $stmt = $db->prepare(
+                "UPDATE onboarding_applications SET status=?, admin_notes=?, denial_reason=?, reviewed_at=NOW() WHERE id=?"
+            );
+            if (!$stmt) {
+                throw new RuntimeException('the status update could not be prepared');
+            }
+            $stmt->bind_param('sssi', $status, $aNote, $denial, $id);
+            $sOk = $stmt->execute();
+            $stmt->close();
+            if (!$sOk) {
+                throw new RuntimeException('the status update failed');
+            }
+
+            $db->commit();
+            $committed = true;
+        } catch (Throwable $e) {
+            // Roll back defensively — if the connection itself is what failed, the
+            // rollback can throw too, and that must not mask the real reason.
+            try { $db->rollback(); } catch (Throwable $ignored) { /* connection already gone */ }
+            $actionErr = "Application #{$id} was NOT {$status} — the change was rolled back: "
+                       . $e->getMessage() . '. Nothing was saved and no email was sent.';
+        } finally {
+            // begin_transaction() only restores autocommit implicitly; put the
+            // connection back into a known state for the handlers that follow.
+            $db->autocommit(true);
+        }
+
+        if ($committed && $app && $app['email']) {
             if ($action === 'approve') {
                 $subj = "AgroBusiness Malawi — Application Approved! ({$app['application_ref']})";
                 $body = "Dear {$app['full_name']},\n\nYour application has been APPROVED.\n"
@@ -230,7 +426,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
             @mail($app['email'], $subj, $body, "From: noreply@agrobusinessmw.com\r\nContent-Type: text/plain; charset=utf-8");
         }
 
-        $actionMsg = "Application #{$id} {$status}.";
+        if ($committed) {
+            $actionMsg = "Application #{$id} {$status}."
+                       . ($promotedTo !== '' ? " Added to the {$promotedTo} directory." : '');
+        }
     }
 }
 
@@ -476,6 +675,10 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
 
     <?php if ($actionMsg): ?>
     <div class="msg">✅ <?= htmlspecialchars($actionMsg) ?></div>
+    <?php endif; ?>
+
+    <?php if ($actionErr): ?>
+    <div class="msg" style="background:rgba(185,64,64,.08);border-color:rgba(185,64,64,.3);color:#b94040">⚠️ <?= htmlspecialchars($actionErr) ?></div>
     <?php endif; ?>
 
     <!-- Filters -->
