@@ -6,7 +6,7 @@
     const TYPE_TO_PAGE = { seller: 'sellers.php', buyer: 'buyers.php' };
     const cache = { seller: null, buyer: null };
     let modal = null;
-    const esc = (v) => window.escapeHtml ? window.escapeHtml(v) : String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const esc = (v) => window.escapeHtml ? window.escapeHtml(v) : String(v ?? '').replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[c]));
     function directoryUrl(type, district) { const qs = new URLSearchParams(); if (district) qs.set('district_id', district); return TYPE_TO_PAGE[type] + (qs.toString() ? '?' + qs.toString() : ''); }
     function detailUrl(type, id, district) { const qs = new URLSearchParams(); qs.set(type + '_id', String(id)); if (district) qs.set('district_id', String(district)); return TYPE_TO_PAGE[type] + '?' + qs.toString(); }
     function pushDirectoryState(type, district) { history.pushState({ screen: 'content', view: type + '_directory', type, district: district || '' }, '', directoryUrl(type, district)); }
@@ -16,13 +16,30 @@
 
     function breadcrumb(type, districtName, contactName) {
         const label = type === 'seller' ? 'Sellers' : 'Buyers';
-        return `<nav class="directory-breadcrumbs" aria-label="Breadcrumb">
-            <a href="index.php" class="directory-crumb" data-breadcrumb="home"><span class="material-symbols-rounded" aria-hidden="true">home</span><span>Home</span></a>
-            <span class="directory-crumb-separator" aria-hidden="true">chevron_right</span>
-            <a href="${TYPE_TO_PAGE[type]}" class="directory-crumb" data-breadcrumb="directory"><span>${label}</span></a>
-            ${districtName ? `<span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><span class="directory-crumb directory-crumb-current"><span>${esc(districtName)}</span></span>` : ''}
-            ${contactName ? `<span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><span class="directory-crumb directory-crumb-current directory-crumb-contact"><span>${esc(contactName)}</span></span>` : ''}
-        </nav>`;
+        return `<nav class="directory-breadcrumbs" aria-label="Breadcrumb"><a href="index.php" class="directory-crumb" data-breadcrumb="home"><span class="material-symbols-rounded" aria-hidden="true">home</span><span>Home</span></a><span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><a href="${TYPE_TO_PAGE[type]}" class="directory-crumb" data-breadcrumb="directory"><span>${label}</span></a>${districtName ? `<span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><span class="directory-crumb directory-crumb-current"><span>${esc(districtName)}</span></span>` : ''}${contactName ? `<span class="directory-crumb-separator" aria-hidden="true">chevron_right</span><span class="directory-crumb directory-crumb-current directory-crumb-contact"><span>${esc(contactName)}</span></span>` : ''}</nav>`;
+    }
+
+    function shareContact(row, type, district) {
+        const title = row.name || (type === 'seller' ? 'Seller' : 'Buyer');
+        const url = new URL(detailUrl(type, row.id, district), window.location.href).href;
+        const text = `${title} — ${type === 'seller' ? 'Seller' : 'Buyer'}${row.district_name ? ` in ${row.district_name}` : ''}`;
+        if (navigator.share) {
+            navigator.share({ title, text, url }).catch(() => {});
+            return;
+        }
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(url).then(() => showShareNotice('Link copied')).catch(() => window.prompt('Copy this link:', url));
+            return;
+        }
+        window.prompt('Copy this link:', url);
+    }
+
+    function showShareNotice(message) {
+        const existing = document.getElementById('directory-share-notice');
+        if (existing) existing.remove();
+        const notice = document.createElement('div'); notice.id = 'directory-share-notice'; notice.className = 'directory-share-notice'; notice.textContent = message; document.body.appendChild(notice);
+        requestAnimationFrame(() => notice.classList.add('is-visible'));
+        setTimeout(() => { notice.classList.remove('is-visible'); setTimeout(() => notice.remove(), 220); }, 1800);
     }
 
     function ensureModal() {
@@ -32,12 +49,7 @@
         document.body.appendChild(modal);
         modal.addEventListener('click', e => {
             const crumb = e.target.closest('[data-breadcrumb]');
-            if (crumb) {
-                e.preventDefault();
-                if (crumb.dataset.breadcrumb === 'directory' && history.state && /_detail$/.test(history.state.view || '')) history.back();
-                else if (crumb.dataset.breadcrumb === 'home') window.location.href = 'index.php';
-                return;
-            }
+            if (crumb) { e.preventDefault(); if (crumb.dataset.breadcrumb === 'directory' && history.state && /_detail$/.test(history.state.view || '')) history.back(); else if (crumb.dataset.breadcrumb === 'home') window.location.href = 'index.php'; return; }
             if (!e.target.closest('[data-directory-close]')) return;
             if (window.app && typeof window.app.closeModal === 'function') window.app.closeModal(modal); else modal.classList.remove('active');
             if (history.state && /_detail$/.test(history.state.view || '')) history.back();
@@ -51,7 +63,8 @@
         const crops = String(row.crops_display || '').split(',').map(s => s.trim()).filter(Boolean);
         if (title) title.textContent = row.name || (type === 'seller' ? 'Seller' : 'Buyer');
         if (crumb) crumb.innerHTML = breadcrumb(type, row.district_name || '', row.name || 'Contact');
-        if (body) body.innerHTML = `<div class="directory-contact-hero"><div class="directory-avatar">${type === 'seller' ? '🌾' : '🏢'}</div><div><span class="directory-role">${type === 'seller' ? 'Seller' : 'Buyer'}</span><h3>${esc(row.name)}</h3><p>${esc(row.district_name || '')}${row.address ? ' · ' + esc(row.address) : ''}</p></div></div>${crops.length ? `<div class="directory-detail-section"><span class="directory-label">Crops</span><div class="directory-crop-list">${crops.map(c => `<span>${esc(c)}</span>`).join('')}</div></div>` : ''}<div class="directory-detail-actions">${row.phone_number ? `<a class="directory-action primary" href="tel:${esc(row.phone_number)}"><span class="material-symbols-rounded">call</span> Call ${esc(row.phone_number)}</a>` : '<p class="directory-muted">No phone number listed.</p>'}${row.email ? `<a class="directory-action" href="mailto:${esc(row.email)}"><span class="material-symbols-rounded">mail</span> Email</a>` : ''}</div>`;
+        if (body) body.innerHTML = `<div class="directory-contact-hero"><div class="directory-avatar">${type === 'seller' ? '🌾' : '🏢'}</div><div><span class="directory-role">${type === 'seller' ? 'Seller' : 'Buyer'}</span><h3>${esc(row.name)}</h3><p>${esc(row.district_name || '')}${row.address ? ' · ' + esc(row.address) : ''}</p></div></div>${crops.length ? `<div class="directory-detail-section"><span class="directory-label">Crops</span><div class="directory-crop-list">${crops.map(c => `<span>${esc(c)}</span>`).join('')}</div></div>` : ''}<div class="directory-detail-actions">${row.phone_number ? `<a class="directory-action primary" href="tel:${esc(row.phone_number)}"><span class="material-symbols-rounded">call</span> Call ${esc(row.phone_number)}</a>` : ''}${row.email ? `<a class="directory-action" href="mailto:${esc(row.email)}"><span class="material-symbols-rounded">mail</span> Email</a>` : ''}<button type="button" class="directory-action directory-share-action" id="directory-share-contact"><span class="material-symbols-rounded">share</span> Share</button>${!row.phone_number && !row.email ? '<p class="directory-muted">No contact details listed.</p>' : ''}</div>`;
+        const shareButton = document.getElementById('directory-share-contact'); if (shareButton) shareButton.addEventListener('click', () => shareContact(row, type, district));
         if (window.app && typeof window.app.openModal === 'function') window.app.openModal(m); else m.classList.add('active');
     }
 
@@ -64,13 +77,7 @@
         const title = type === 'seller' ? 'Find Sellers' : 'Find Buyers'; const subtitle = type === 'seller' ? 'See sellers first, then narrow the list by district.' : 'See buyers first, then narrow the list by district.';
         area.innerHTML = `<section class="directory-page">${breadcrumb(type, districtName, '')}<div class="directory-hero"><div><span class="directory-eyebrow">AgroBusiness Malawi</span><h2>${title}</h2><p>${subtitle}</p></div><div class="directory-total"><strong>${rows.length}</strong><span>${type}s</span></div></div><div class="directory-controls"><label class="directory-search"><span class="material-symbols-rounded">search</span><input id="directory-search" type="search" placeholder="Search ${type}s, crops, phone…" autocomplete="off"></label><label class="directory-district"><span>District</span><select id="directory-district"><option value="">All districts</option>${districtOptions}</select></label></div><div class="directory-count" id="directory-count"></div><div class="directory-grid" id="directory-grid"></div></section>`;
         const search = area.querySelector('#directory-search'), select = area.querySelector('#directory-district'), grid = area.querySelector('#directory-grid'), count = area.querySelector('#directory-count');
-        area.querySelectorAll('[data-breadcrumb]').forEach(link => link.addEventListener('click', e => {
-            if (link.dataset.breadcrumb === 'home') return;
-            e.preventDefault();
-            if (link.dataset.breadcrumb === 'directory') {
-                if (district) { history.pushState({ screen: 'content', view: type + '_directory', type, district: '' }, '', directoryUrl(type, '')); openDirectory(type, '', false); }
-            }
-        }));
+        area.querySelectorAll('[data-breadcrumb]').forEach(link => link.addEventListener('click', e => { if (link.dataset.breadcrumb === 'home') return; e.preventDefault(); if (link.dataset.breadcrumb === 'directory') { if (district) { history.pushState({ screen: 'content', view: type + '_directory', type, district: '' }, '', directoryUrl(type, '')); openDirectory(type, '', false); } } });
         function apply() {
             const term = search.value.trim().toLowerCase(), selected = select.value;
             const filtered = rows.filter(r => { const hay = `${r.name || ''} ${r.district_name || ''} ${r.phone_number || ''} ${r.email || ''} ${r.address || ''} ${r.crops_display || ''}`.toLowerCase(); return (!term || hay.includes(term)) && (!selected || String(r.district_id) === String(selected)); });
@@ -81,25 +88,7 @@
         search.addEventListener('input', apply); select.addEventListener('change', () => { pushDirectoryState(type, select.value); apply(); }); apply();
     }
     async function openDirectory(type, district, shouldPush) { try { if (window.app && typeof window.app.showScreen === 'function') window.app.showScreen('content'); if (window.app && typeof window.app.showLoading === 'function') window.app.showLoading(); const rows = await loadAll(type); render(type, rows, district || '', shouldPush); } catch (e) { console.error('Directory load failed:', e); if (window.app && typeof window.app.showError === 'function') window.app.showError('Could not load contacts. Please try again.'); } }
-    async function replayPage() {
-        const page = location.pathname.split('/').pop() || 'index.php', type = PAGE_TO_TYPE[page.replace('.php', '')]; if (!type) return;
-        const initial = new URL(INITIAL_URL, location.href), qs = initial.searchParams, id = Number(qs.get(type + '_id') || 0), district = qs.get('district_id') || '', rows = await loadAll(type);
-        if (initial.search) history.replaceState({ screen: 'content', view: id ? type + '_detail' : type + '_directory', type, id: id || undefined, district }, '', initial.pathname + initial.search);
-        if (id) { const row = rows.find(r => Number(r.id) === id); if (row) openDetail(row, type, false, district); else render(type, rows, district, false); } else render(type, rows, district, false);
-    }
-    function install() {
-        if (!window.app) return;
-        const originalOpenService = window.app.openService.bind(window.app);
-        window.app.openService = function (service) { if (service === 'sellers' || service === 'buyers') { openDirectory(service === 'sellers' ? 'seller' : 'buyer', '', true); return; } return originalOpenService(service); };
-        if (typeof window.app._replayState === 'function') {
-            const originalReplay = window.app._replayState.bind(window.app);
-            window.app._replayState = function (state) {
-                if (state && (state.view === 'seller_directory' || state.view === 'buyer_directory')) { openDirectory(state.type, state.district || '', false); return; }
-                if (state && (state.view === 'seller_detail' || state.view === 'buyer_detail')) { loadAll(state.type).then(rows => { const row = rows.find(r => Number(r.id) === Number(state.id)); if (row) openDetail(row, state.type, false, state.district || ''); else openDirectory(state.type, state.district || '', false); }); return; }
-                originalReplay(state);
-            };
-        }
-        if (window.AGRO_PAGE === 'sellers' || window.AGRO_PAGE === 'buyers') setTimeout(replayPage, 0);
-    }
+    async function replayPage() { const page = location.pathname.split('/').pop() || 'index.php', type = PAGE_TO_TYPE[page.replace('.php', '')]; if (!type) return; const initial = new URL(INITIAL_URL, location.href), qs = initial.searchParams, id = Number(qs.get(type + '_id') || 0), district = qs.get('district_id') || '', rows = await loadAll(type); if (initial.search) history.replaceState({ screen: 'content', view: id ? type + '_detail' : type + '_directory', type, id: id || undefined, district }, '', initial.pathname + initial.search); if (id) { const row = rows.find(r => Number(r.id) === id); if (row) openDetail(row, type, false, district); else render(type, rows, district, false); } else render(type, rows, district, false); }
+    function install() { if (!window.app) return; const originalOpenService = window.app.openService.bind(window.app); window.app.openService = function (service) { if (service === 'sellers' || service === 'buyers') { openDirectory(service === 'sellers' ? 'seller' : 'buyer', '', true); return; } return originalOpenService(service); }; if (typeof window.app._replayState === 'function') { const originalReplay = window.app._replayState.bind(window.app); window.app._replayState = function (state) { if (state && (state.view === 'seller_directory' || state.view === 'buyer_directory')) { openDirectory(state.type, state.district || '', false); return; } if (state && (state.view === 'seller_detail' || state.view === 'buyer_detail')) { loadAll(state.type).then(rows => { const row = rows.find(r => Number(r.id) === Number(state.id)); if (row) openDetail(row, state.type, false, state.district || ''); else openDirectory(state.type, state.district || '', false); }); return; } originalReplay(state); }; } if (window.AGRO_PAGE === 'sellers' || window.AGRO_PAGE === 'buyers') setTimeout(replayPage, 0); }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install); else install();
 })();
