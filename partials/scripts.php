@@ -15,6 +15,7 @@ $service = $service ?? null;
 </script>
 <script src="assets/js/directory-navigation.js?v=20260815-0001"></script>
 <script src="assets/js/app.js" defer></script>
+<script src="assets/js/market-insights-page.js?v=20260815-0002" defer></script>
 <script src="assets/js/directory-home-hook.js?v=20260815-0001"></script>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/sortable-table.js" defer></script>
@@ -26,6 +27,7 @@ $service = $service ?? null;
 <link rel="stylesheet" href="assets/css/price-location-selector.css">
 <link rel="stylesheet" href="assets/css/district-theme.css">
 <link rel="stylesheet" href="assets/css/directory-navigation.css">
+<link rel="stylesheet" href="assets/css/market-insights-page.css?v=20260815-0002">
 <script>
 window.addEventListener('load',function(){
     if('serviceWorker' in navigator){const u=new URL('sw.js',window.location.href).href;navigator.serviceWorker.getRegistrations().then(r=>r.forEach(x=>{if(x.scriptURL===u)x.unregister();})).catch(()=>{});}
