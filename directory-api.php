@@ -37,6 +37,7 @@ $port = (int)($_ENV['DB_PORT'] ?? 3306);
 
 try {
     if ($host === '' || $user === '' || $name === '') throw new Exception('Database configuration is missing.');
+
     $db = mysqli_init();
     $db->options(MYSQLI_OPT_CONNECT_TIMEOUT, 10);
     if (!@$db->real_connect($host, $user, $pass, $name, $port)) throw new Exception('Database connection failed.');
@@ -48,16 +49,17 @@ try {
     $crop = trim($_GET['crop'] ?? '');
 
     if ($type === 'sellers') {
+        // Keep this query limited to tables/columns in the directory schema. Ratings
+        // were previously joined here, but the deployed database does not require a
+        // ratings table for the Sellers directory and the UI does not display ratings.
         $sql = "SELECT s.id, s.name, s.district_id, d.name AS district_name,
                        scd.phone_number, scd.email, scd.address,
-                       GROUP_CONCAT(c.name ORDER BY c.name SEPARATOR ', ') AS crops_display,
-                       ROUND(AVG(r.rating_value), 1) AS rating
+                       GROUP_CONCAT(c.name ORDER BY c.name SEPARATOR ', ') AS crops_display
                 FROM sellers s
                 JOIN districts d ON s.district_id = d.id
-                JOIN seller_contact_details scd ON s.contact_id = scd.id
+                LEFT JOIN seller_contact_details scd ON s.contact_id = scd.id
                 LEFT JOIN seller_crops sc ON s.id = sc.seller_id
                 LEFT JOIN crops c ON sc.crop_id = c.id
-                LEFT JOIN ratings r ON s.id = r.seller_id
                 WHERE 1=1";
         $types = '';
         $values = [];
@@ -66,14 +68,14 @@ try {
             $sql .= " AND s.id IN (SELECT sc2.seller_id FROM seller_crops sc2 JOIN crops c2 ON sc2.crop_id = c2.id WHERE c2.name = ?)";
             $types .= 's'; $values[] = $crop;
         }
-        $sql .= ' GROUP BY s.id ORDER BY ROUND(AVG(r.rating_value), 1) DESC, s.name ASC';
+        $sql .= ' GROUP BY s.id, s.name, s.district_id, d.name, scd.phone_number, scd.email, scd.address ORDER BY s.name ASC';
     } else {
         $sql = "SELECT b.id, b.name, b.district_id, d.name AS district_name,
                        bcd.phone_number, bcd.email, bcd.address,
                        GROUP_CONCAT(c.name ORDER BY c.name SEPARATOR ', ') AS crops_display
                 FROM buyers b
                 JOIN districts d ON b.district_id = d.id
-                JOIN buyer_contact_details bcd ON b.contact_id = bcd.id
+                LEFT JOIN buyer_contact_details bcd ON b.contact_id = bcd.id
                 LEFT JOIN buyer_crops bc ON b.id = bc.buyer_id
                 LEFT JOIN crops c ON bc.crop_id = c.id
                 WHERE 1=1";
@@ -84,7 +86,7 @@ try {
             $sql .= " AND b.id IN (SELECT bc2.buyer_id FROM buyer_crops bc2 JOIN crops c2 ON bc2.crop_id = c2.id WHERE c2.name = ?)";
             $types .= 's'; $values[] = $crop;
         }
-        $sql .= ' GROUP BY b.id ORDER BY b.name ASC';
+        $sql .= ' GROUP BY b.id, b.name, b.district_id, d.name, bcd.phone_number, bcd.email, bcd.address ORDER BY b.name ASC';
     }
 
     $stmt = $db->prepare($sql);
@@ -94,7 +96,8 @@ try {
         foreach ($values as $i => $value) $refs[] = &$values[$i];
         call_user_func_array([$stmt, 'bind_param'], $refs);
     }
-    $stmt->execute();
+    if (!$stmt->execute()) throw new Exception('Directory query failed: ' . $stmt->error);
+
     $rows = directory_stmt_fetch_all($stmt);
     echo json_encode(['success' => true, 'data' => $rows, 'count' => count($rows)]);
 } catch (Throwable $e) {
