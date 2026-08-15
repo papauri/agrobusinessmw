@@ -23,9 +23,9 @@ function register_normalize_phone(string $value, string $defaultCountry = '265')
 
     if (str_starts_with($value, '00')) {
         $value = '+' . substr($value, 2);
-    } elseif (!str_starts_with($value, '+') && preg_match('/^0[0-9]{8,14}$/', $value)) {
+    } elseif (!str_starts_with($value, '+') && preg_match('/^0[0-9]{9}$/', $value)) {
         $value = '+' . $defaultCountry . substr($value, 1);
-    } elseif (!str_starts_with($value, '+') && preg_match('/^[1-9][0-9]{7,14}$/', $value)) {
+    } elseif (!str_starts_with($value, '+') && preg_match('/^[1-9][0-9]{8}$/', $value)) {
         $value = '+' . $defaultCountry . $value;
     }
 
@@ -53,8 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fullName   = trim((string)($body['full_name'] ?? ''));
         $phoneInput = trim((string)($body['phone_number'] ?? ''));
         $waInput    = trim((string)($body['whatsapp_number'] ?? ''));
-        $email      = trim((string)($body['email'] ?? ''));
-        $nationalId = trim((string)($body['national_id'] ?? ''));
+        $emailInput = trim((string)($body['email'] ?? ''));
+        $nationalInput = trim((string)($body['national_id'] ?? ''));
         $districtId = (int)($body['district_id'] ?? 0);
         $village    = trim((string)($body['village'] ?? ''));
         $crops      = trim((string)($body['crops_of_interest'] ?? ''));
@@ -68,7 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $whatsapp = register_normalize_phone($waInput);
         if ($waInput !== '' && !$whatsapp) throw new RuntimeException('Enter a valid WhatsApp number or leave it blank.');
-        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new RuntimeException('Enter a valid email address or leave it blank.');
+        $email = $emailInput !== '' ? $emailInput : null;
+        $nationalId = $nationalInput !== '' ? $nationalInput : null;
+        if ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new RuntimeException('Enter a valid email address or leave it blank.');
         if ($districtId <= 0) throw new RuntimeException('District is required.');
         if (mb_strlen($village) < 2) throw new RuntimeException('Village / town is required.');
         if ($userType !== 'farmer' && $business === '') throw new RuntimeException('Business name is required for sellers and buyers.');
@@ -95,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $districtStmt->close();
         if (!$hasDistrict) throw new RuntimeException('The selected district could not be found.');
 
-        $dupSql = 'SELECT application_ref FROM onboarding_applications WHERE phone_number = ? OR (? <> "" AND email <> "" AND email = ?) OR (? <> "" AND national_id <> "" AND national_id = ?) LIMIT 1';
+        $dupSql = 'SELECT application_ref FROM onboarding_applications WHERE phone_number = ? OR (? IS NOT NULL AND email = ?) OR (? IS NOT NULL AND national_id = ?) LIMIT 1';
         $dup = $db->prepare($dupSql);
         if (!$dup) throw new RuntimeException('Could not check existing applications.');
         $dup->bind_param('sssss', $phone, $email, $email, $nationalId, $nationalId);
