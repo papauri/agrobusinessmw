@@ -11,8 +11,8 @@
     let v = String(value || '').trim().replace(/[\s().-]+/g, '');
     if (!v) return null;
     if (v.startsWith('00')) v = '+' + v.slice(2);
-    else if (v.startsWith('0')) v = '+265' + v.slice(1);
-    else if (!v.startsWith('+')) v = '+265' + v;
+    else if (/^0[0-9]{9}$/.test(v)) v = '+265' + v.slice(1);
+    else if (/^[1-9][0-9]{8}$/.test(v)) v = '+265' + v;
     return /^\+[1-9][0-9]{7,14}$/.test(v) ? v : null;
   }
 
