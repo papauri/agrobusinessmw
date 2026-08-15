@@ -15,6 +15,7 @@ $service = $service ?? null;
 </script>
 <script src="assets/js/directory-navigation.js?v=20260815-0001"></script>
 <script src="assets/js/app.js" defer></script>
+<script src="assets/js/registration-home-hook.js?v=20260815-0001" defer></script>
 <script src="assets/js/market-insights-page.js?v=20260815-0003" defer></script>
 <script src="assets/js/directory-home-hook.js?v=20260815-0001"></script>
 <script src="assets/js/config.js"></script>
