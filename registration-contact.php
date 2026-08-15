@@ -6,12 +6,12 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['success'=>false,'error'=>'POST method required']); exit; }
-function fail(string $message, int $status=400): never { http_response_code($status); echo json_encode(['success'=>false,'error'=>$message]); exit; }
+function fail(string $message, int $status=400) { http_response_code($status); echo json_encode(['success'=>false,'error'=>$message]); exit; }
 function canonical_phone(?string $value): ?string {
     $value=trim((string)$value); if($value==='') return null;
     $value=preg_replace('/[^0-9+]/','',$value); $value=preg_replace('/^\++/','+',$value); if($value==='') return null;
     if($value[0]==='+') return preg_match('/^\+[1-9][0-9]{7,14}$/',$value)?$value:null;
-    if(str_starts_with($value,'265') && strlen($value)>=10){$v='+'.$value;return preg_match('/^\+[1-9][0-9]{7,14}$/',$v)?$v:null;}
+    if(strpos($value,'265')===0 && strlen($value)>=10){$v='+'.$value;return preg_match('/^\+[1-9][0-9]{7,14}$/',$v)?$v:null;}
     if(preg_match('/^0[0-9]{9}$/',$value)){$v='+265'.substr($value,1);return preg_match('/^\+[1-9][0-9]{7,14}$/',$v)?$v:null;}
     if(preg_match('/^[89][0-9]{8}$/',$value)){$v='+265'.$value;return preg_match('/^\+[1-9][0-9]{7,14}$/',$v)?$v:null;}
     return null;
@@ -25,7 +25,7 @@ function stmt_one(mysqli_stmt $stmt): ?array {
 $envFile=__DIR__.'/.env';
 if(file_exists($envFile)) foreach(file($envFile,FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES) as $line){if($line===''||$line[0]==='#'||strpos($line,'=')===false)continue;[$key,$val]=explode('=',$line,2);$_ENV[trim($key)]=trim($val);}
 $host=$_ENV['DB_HOST']??'';$user=$_ENV['DB_USER']??'';$pass=$_ENV['DB_PASS']??'';$name=$_ENV['DB_NAME']??'';$port=(int)($_ENV['DB_PORT']??3306);
-if(!$host||!$user||!$name) fail('Database configuration is missing.',500);
+if(!$host||!$user||!$name)fail('Database configuration is missing.',500);
 $db=mysqli_init();$db->options(MYSQLI_OPT_CONNECT_TIMEOUT,10);if(!@$db->real_connect($host,$user,$pass,$name,$port))fail('Database connection failed.',500);$db->set_charset('utf8mb4');
 $body=json_decode(file_get_contents('php://input'),true)??[];$ref=strtoupper(trim((string)($body['application_ref']??'')));$phone=canonical_phone($body['phone_number']??null);$whatsapp=canonical_phone($body['whatsapp_number']??null);
 if(!preg_match('/^AGR-[0-9]{8}-[A-Z0-9]{5}$/',$ref))fail('Invalid application reference.');
