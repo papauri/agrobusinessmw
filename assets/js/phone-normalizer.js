@@ -93,7 +93,18 @@
         return typeof value === 'string' && E164.test(value);
     }
 
-    const INVALID_MESSAGE = 'Enter a Malawi number as 0888 123 456, or an international number with its country code, e.g. +44 7700 900123.';
+    // Shown as a native validation bubble, so it must follow the reader's
+    // language. AgroLang is optional here — this file is also loaded on pages
+    // that predate it, and English is a working fallback.
+    const INVALID = {
+        en: 'Enter a Malawi number as 0888 123 456, or an international number with its country code, e.g. +44 7700 900123.',
+        ci: 'Lembani nambala ya ku Malawi motere 0888 123 456, kapena nambala ya kunja ndi nambala ya dziko, mwachitsanzo +44 7700 900123.'
+    };
+
+    function invalidMessage() {
+        const lang = window.AgroLang ? window.AgroLang.current() : 'en';
+        return INVALID[lang] || INVALID.en;
+    }
 
     function fieldIsPhone(field) {
         if (!field || field.disabled) return false;
@@ -114,7 +125,7 @@
         }
         const normalized = normalizePhone(value);
         if (!normalized) {
-            field.setCustomValidity(INVALID_MESSAGE);
+            field.setCustomValidity(invalidMessage());
             return false;
         }
         field.setCustomValidity('');
@@ -135,7 +146,7 @@
     window.AgroPhone = {
         normalize: normalizePhone,
         isE164: isE164,
-        invalidMessage: INVALID_MESSAGE,
+        invalidMessage: invalidMessage,
         normalizeField: normalizeField,
         normalizeFields: normalizeFields
     };
@@ -161,7 +172,7 @@
             field.value = normalized;
             field.setCustomValidity('');
         } else {
-            field.setCustomValidity(INVALID_MESSAGE);
+            field.setCustomValidity(invalidMessage());
         }
     }, true);
 })();

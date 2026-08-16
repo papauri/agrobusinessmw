@@ -42,6 +42,9 @@ echo "== Phone normalisation =="
 php tests/phone_test.php;  report $? "config/phone.php contract"
 node tests/phone_test.mjs; report $? "assets/js/phone-normalizer.js parity"
 
+echo "== Bilingual parity =="
+python3 tests/i18n_parity.py; report $? "en/ci key parity across all translation tables"
+
 echo "== Structure =="
 
 # Registration must have exactly one implementation. These greps are the guard
@@ -85,6 +88,13 @@ count=$(printf '%s' "$offenders" | grep -c . )
 
 git ls-files --error-unmatch .env >/dev/null 2>&1 && tracked=1 || tracked=0
 [ "$tracked" -eq 0 ]; report $? ".env is not tracked by git"
+
+# The standalone controllers must not hardcode a user-facing string outside
+# their copy tables — that is how register.js and the directory ended up
+# English-only in the first place.
+count=$(grep -nE "(setError|textContent|placeholder|innerHTML) *=? *'[A-Z][a-z]+ [a-z]" \
+    assets/js/register.js assets/js/directory-navigation.js 2>/dev/null | wc -l)
+[ "$count" -eq 0 ]; report $? "no hardcoded UI strings in the standalone controllers (found $count)"
 
 # Scripts referenced by a page must exist on disk.
 missing=""

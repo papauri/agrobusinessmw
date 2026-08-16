@@ -405,3 +405,67 @@
 @media (prefers-reduced-motion: reduce) {
     .register-role, .register-progress li span { transition: none; }
 }
+
+/* ── Language switcher ───────────────────────────────────────────────────── */
+/* Registration is standalone and does not include the shared content header, so
+   it carries its own switcher. Someone who reaches this page straight from the
+   nav must be able to read the form without going back to the dashboard. */
+
+.register-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.register-lang-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    min-height: 44px;
+    padding: 0 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.register-lang-toggle:hover {
+    border-color: var(--accent);
+    background: var(--gray-50);
+}
+
+.register-lang-flag { font-size: 1rem; line-height: 1; }
+.register-lang-code { letter-spacing: 0.04em; }
+
+/* The progress list labels: hidden on the narrowest phones, where four words
+   plus four circles do not fit, but always available to a screen reader. */
+.register-progress li i {
+    font-style: normal;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+@media (min-width: 480px) {
+    .register-progress li i {
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: visible;
+        clip: auto;
+        white-space: normal;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .register-lang-toggle { transition: none; }
+}

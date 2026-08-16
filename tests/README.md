@@ -19,6 +19,8 @@ back:
 | exactly one `escapeHtml` | a second, subtly different escape helper |
 | no references to non-existent tables | queries against tables no schema creates |
 | schema of record covers every table | a table used by code but absent from the `.sql` dump |
+| en/ci key parity | a string that exists in one language but not the other |
+| no hardcoded UI strings | a user-facing literal outside a controller's copy table |
 | no committed credential | a real secret in a tracked file |
 | every referenced asset exists | a `<script>`/`<link>` pointing at a deleted file |
 
@@ -31,7 +33,10 @@ reintroduced. A check that cannot fail is not a gate.
 php -S 127.0.0.1:8080 &          # with a populated .env
 node tests/browser/registration_flow.mjs
 node tests/browser/directory_flow.mjs
+node tests/browser/navigation_flow.mjs
+node tests/browser/language_flow.mjs
 node tests/browser/page_health.mjs
+node tests/browser/chichewa_overflow.mjs
 ```
 
 `page_health.mjs` loads every page at 320/360/390/430/768/1280px and fails on a
@@ -57,5 +62,13 @@ sed 's/utf8mb4_0900_ai_ci/utf8mb4_general_ci/g' p601229_AgroBusiness_MW.sql \
   | mysql -u root agro_test
 ```
 
-`registration_flow.mjs` generates a fresh phone number per run, so it is
-repeatable against a database that already holds earlier runs.
+`registration_flow.mjs` and `language_flow.mjs` generate a fresh phone number per
+run, so both are repeatable against a database that already holds earlier runs.
+
+`chichewa_overflow.mjs` is separate from `page_health.mjs` because Chichewa
+strings are longer: a layout can pass in English and overflow once translated.
+
+Note: `php -S` is single-threaded. Running several browser suites back to back
+can make one queue long enough for a fetch to reject, which surfaces as a
+console error in whichever suite is running. Run them one at a time if you see
+an unexplained console-error failure; PHP-FPM in production has real workers.

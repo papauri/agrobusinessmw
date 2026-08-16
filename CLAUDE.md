@@ -22,7 +22,7 @@ A **dual-channel agricultural platform** for Malawian farmers:
 | USSD handler | `ussd/` — POST from the gateway, replies `CON`/`END` |
 | Database | MySQL, database `p601229_AgroBusiness_MW` |
 | Hosting | cPanel — `agrobusinessmw.com` → `/home/p601229/public_html/agrobusinessmw/` |
-| Languages | English (`en`) and Chichewa (`ci`) — keys in `app.js` `this.texts` |
+| Languages | English (`en`) and Chichewa (`ci`) — see Bilingual below |
 
 **Theme is Japandi, not green.** `--accent #8B7355` (warm taupe) on `--bg #f5f2eb`
 (cream), tokens at the top of `assets/css/style.css`. Green (`#16a34a`) is
@@ -71,6 +71,39 @@ who is never contacted.
 If you change one file, change the other and run `php tests/phone_test.php` and
 `node tests/phone_test.mjs` — the second checks parity against the first.
 
+## Bilingual — English and Chichewa
+
+The reader's language lives in `localStorage.preferredLanguage` (`'en'` / `'ci'`).
+`assets/js/i18n.js` owns reading and writing it and broadcasts `agro:langchange`;
+`app.js` routes its own switcher through `_persistLanguage()` so the standalone
+pages re-render instead of waiting for a reload.
+
+Five translation tables, all with complete key parity:
+
+| Table | Covers |
+|---|---|
+| `app.js` `this.texts` | dashboard and the shared views |
+| `assets/js/register.js` `copy` | the registration page |
+| `assets/js/directory-navigation.js` `copy` | Sellers / Buyers |
+| `assets/js/market-insights-page.js` `copy` | Market Insights |
+| `register.php` `REGISTRATION_STRINGS` | server-side validation + the applicant's email |
+
+Rules:
+- **Never hardcode a user-facing string** in a controller. Add a key to that
+  file's table. `tests/run.sh` fails on new hardcoded strings in the standalone
+  controllers, and `tests/i18n_parity.py` fails on any key missing from either
+  language.
+- `register.php` cannot read localStorage, so the client sends `lang` with the
+  preflight and the POST. Errors come back localised, plus a stable `code` for
+  anything that needs to branch on the reason rather than the prose.
+- The applicant's confirmation email goes out in the language they registered
+  in. The review team's copy is always English.
+- **Watch noun-class agreement.** Chichewa concords agree with the noun class of
+  the subject, so a sentence built around a variable label ("{label} imeneyi
+  yalembetsedwa") is only correct for some labels. Put the variable after a
+  fixed subject instead — see `duplicate` in `REGISTRATION_STRINGS`.
+- Chichewa strings run longer than English. Re-check 320px after adding any.
+
 ## Credentials & environment
 
 Credentials live in `.env` (gitignored). Never hardcode them.
@@ -97,14 +130,16 @@ App → http://localhost:8080 · API health → http://localhost:8080/api.php?ac
 ## Testing
 
 ```bash
-bash tests/run.sh              # lint + phone contract + structural gates
+bash tests/run.sh              # lint + phone contract + i18n parity + structural gates
 php  tests/phone_test.php      # phone normalisation contract
 node tests/phone_test.mjs      # browser/server parity
+python3 tests/i18n_parity.py   # en/ci key parity across all five tables
 
 # Browser tests — need a running server and a database
 node tests/browser/registration_flow.mjs
 node tests/browser/directory_flow.mjs
 node tests/browser/navigation_flow.mjs
+node tests/browser/language_flow.mjs    # Chichewa end to end
 node tests/browser/page_health.mjs      # every page, 320→1280px
 ```
 
@@ -131,6 +166,7 @@ non-existent table, or a committed credential reappears.
 | `assets/js/directory-navigation.js` | Sellers/Buyers contact-first directory |
 | `assets/js/market-insights-page.js` | Market Insights page |
 | `assets/js/phone-normalizer.js` | Canonical phone normalisation (browser) |
+| `assets/js/i18n.js` | Shared language state (`AgroLang`) |
 | `partials/` | `head`, `nav`, `footer`, `scripts`, `modals`, `content-screen`, `function-page` |
 | `p601229_AgroBusiness_MW.sql` | Full schema — 21 tables |
 | `migrations/` | Additive migrations for existing deployments |

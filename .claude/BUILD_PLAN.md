@@ -626,6 +626,103 @@ objective's premise, lint the whole tree and load every page.** The plan
 described work on top of a registration page that could not execute a single
 statement.
 
+---
+
+## 2026-08-16 (later) — BILINGUAL PARITY FOR REGISTRATION AND THE DIRECTORY
+
+Closes **3.5**, the objective filed hours earlier in this same pass, and with it
+**completion criterion 4**.
+
+`register.php`, `register.js` and `directory-navigation.js` shipped English-only.
+Registration is the one form a farmer must complete to exist in the system, and
+a Chichewa reader met it entirely in English — including the validation errors
+telling them what they had got wrong.
+
+### How the language is shared
+
+`assets/js/i18n.js` (new) owns `localStorage.preferredLanguage` — **the key
+app.js already used**, not a second source of truth — and broadcasts
+`agro:langchange`. `app.js` now routes its own switcher through
+`_persistLanguage()`, so a language chosen on the dashboard reaches the
+standalone pages, and switching it *on* sellers.php re-renders the directory
+instead of silently doing nothing until a reload.
+
+Five tables, all at complete key parity, enforced by `tests/i18n_parity.py`:
+
+| Table | Keys |
+|---|---|
+| `app.js` `this.texts` | 44 / 44 |
+| `register.js` `copy` | 78 / 78 |
+| `directory-navigation.js` `copy` | 26 / 26 |
+| `market-insights-page.js` `copy` | 19 / 19 |
+| `register.php` `REGISTRATION_STRINGS` | 32 / 32 |
+
+### Server-side messages
+
+`register.php` cannot read localStorage, so the client sends `lang` with both the
+preflight and the POST. `RegistrationError` now carries a message **key**
+resolved at throw time, and every response also returns a stable `code` so a
+caller can branch on the reason rather than parse prose. The applicant's
+confirmation email goes out in the language they registered in; the review
+team's copy stays English and records which language was used.
+
+### Two real bugs the translation work exposed
+
+1. **Double translation.** `register_find_duplicates()` returned an
+   already-localised status, and the POST handler translated it again, producing
+   the literal `status_ikuyembekezera` in a message shown to farmers. It now
+   returns the raw status *and* a `status_label`.
+2. **Chichewa noun-class agreement.** The duplicate message was built as
+   `{label} imeneyi yalembetsedwa` — the concord agrees with the noun class of
+   the subject, so it was correct for *nambala* and *imelo* (class 9) and wrong
+   for *chiphaso* (class 7). Restructured to a fixed subject with the label after
+   a colon, which is correct for any label. **Worth remembering: a template with
+   a variable subject cannot be grammatical in Chichewa for every substitution.**
+
+### Verified
+
+- `bash tests/run.sh` — **60 passed, 0 failed** (was 57; +parity, +hardcoded-string gate).
+- `tests/browser/language_flow.mjs` — **40 assertions**: page labels, field
+  labels, client validation, server validation, the duplicate warning, a full
+  Chichewa registration through to the reference number, the directory list,
+  contact actions, the empty state, and English still working afterwards.
+- **Switching language mid-form re-labels in place and does not lose typed
+  input** — asserted, because a reload here would have thrown away a
+  half-finished form.
+- `tests/browser/chichewa_overflow.mjs` — every page at 320/360/390px in
+  Chichewa: **36 checks, 0 overflow**. Chichewa strings run longer than English,
+  so this is a distinct risk from the English sweep and gets its own test.
+- All earlier suites re-run clean: registration (English), directory, navigation.
+
+Both new gates were canary-tested: removing a `ci` key fails the parity check,
+and the hardcoded-string gate is what would have caught this objective existing
+at all.
+
+### Definition of Done — updated
+
+| # | Criterion | Status |
+|---|---|---|
+| 4 | Bilingual parity | **MET** — 5 tables, complete parity, gated in CI |
+
+Criteria 2, 3, 4, 7, 8 met. 1 (USSD unverifiable), 5 (contrast, 3.2) and 6
+(breakpoints, 3.1) remain as recorded above. **Still not complete by the
+project's own definition** — 3.1 and 3.2 are the remaining blockers, plus the
+USSD channel which cannot be verified from here.
+
+### Known flake, stated rather than hidden
+
+One `language_flow.mjs` run failed on a console error from `app.js`'s
+`testConnection()` while four browser suites ran back to back. `php -S` is
+single-threaded, so a queued request can reject. Three consecutive re-runs are
+clean and a six-way concurrent probe returns 200 across the board. Dev-server
+contention, not an application defect — but recorded, not dismissed.
+
+### Not translated, deliberately
+
+`admin/index.php` (the review team works in English), the FEWS/price story
+strings in `app.js` that were already English-only before this pass, and
+`privacy.php`. Registration and the directory were the scope.
+
 ## Status log
 
 Append one line per completed cycle: `<date> · <objective> · <owner> · PASS|FAIL · <note>`

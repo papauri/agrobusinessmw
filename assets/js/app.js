@@ -419,8 +419,8 @@ class AgroBusinessRevolution {
     selectLanguageWithAnimation(card, lang) {
         // Persist choice
         localStorage.setItem('hasSelectedLanguage', 'true');
-        localStorage.setItem('preferredLanguage', lang);
         this.currentLang = lang;
+        this._persistLanguage(lang);
         this.updateLanguageFlags();
         this.updateTexts();
 
@@ -724,7 +724,7 @@ class AgroBusinessRevolution {
         }
 
         this.currentLang = lang;
-        localStorage.setItem('preferredLanguage', lang);
+        this._persistLanguage(lang);
         this.updateTexts();
         this.updateLanguageFlags();
         this.closeLanguageDropdown();
@@ -737,6 +737,18 @@ class AgroBusinessRevolution {
         // Announce to screen readers
         this.announceToScreenReader(`Language changed to ${lang === 'en' ? 'English' : 'Chichewa'}`);
     }
+    /* Persist the language and tell the rest of the page.
+     *
+     * assets/js/i18n.js owns the same `preferredLanguage` key and broadcasts a
+     * change event; the standalone page controllers (directory, registration)
+     * listen for it. Without this call they would keep rendering in the old
+     * language until a reload, which is exactly what happened when the header
+     * switcher was used on sellers.php. */
+    _persistLanguage(lang) {
+        localStorage.setItem('preferredLanguage', lang);
+        if (window.AgroLang) window.AgroLang.set(lang);
+    }
+
     updateLanguageFlags() {
         const flags = { en: '🇬🇧', ci: '🇲🇼' };
         const codes = { en: 'EN', ci: 'CI' };
@@ -932,7 +944,7 @@ class AgroBusinessRevolution {
     _bootPage() {
         const page = window.AGRO_PAGE || null;
 
-        const savedLang = localStorage.getItem('preferredLanguage');
+        const savedLang = window.AgroLang ? window.AgroLang.current() : localStorage.getItem('preferredLanguage');
         if (savedLang && this.texts[savedLang]) {
             this.currentLang = savedLang;
             this.updateLanguageFlags();

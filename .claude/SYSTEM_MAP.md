@@ -116,19 +116,47 @@ back. Without the unique key every price report creates a duplicate market.
 
 ---
 
+## 3a. Language
+
+`localStorage.preferredLanguage` (`'en'` / `'ci'`) is the single source of truth,
+written by `app.js`'s switcher and by `assets/js/i18n.js`'s `AgroLang.set()`.
+`i18n.js` broadcasts `agro:langchange`; the standalone controllers listen and
+re-render in place.
+
+| Table | en | ci |
+|---|---|---|
+| `app.js` `this.texts` | 44 | 44 |
+| `assets/js/register.js` `copy` | 78 | 78 |
+| `assets/js/directory-navigation.js` `copy` | 26 | 26 |
+| `assets/js/market-insights-page.js` `copy` | 19 | 19 |
+| `register.php` `REGISTRATION_STRINGS` | 32 | 32 |
+
+Parity is gated by `tests/i18n_parity.py`, which is run by `tests/run.sh`.
+
+`register.php` receives `lang` on the preflight and the POST, returns localised
+messages plus a stable `code`, and emails the applicant in their own language.
+
+Not translated: `admin/index.php` (review team works in English), `privacy.php`,
+and the price-story strings in `app.js`.
+
+---
+
 ## 4. Script load order (`partials/scripts.php`)
 
 Order is deliberate:
 
-1. `config.js`, `phone-normalizer.js` — plain scripts, define globals
+1. `config.js`, `i18n.js`, `phone-normalizer.js` — plain scripts, define globals
+   (`AGRO_CONFIG`, `AgroLang`, `AgroPhone`); `phone-normalizer.js` reads
+   `AgroLang` for its validation message
 2. `app.js` (deferred) — defines `window.app`
 3. `directory-navigation.js`, `market-insights-page.js` (deferred, run after
    `app.js` in document order) — each owns exactly one page and returns
    immediately elsewhere
 4. `sortable-table.js`, `price-report-story.js`, `quiet-db-notification.js`
 
-`register.php` does **not** load `app.js`. It loads `phone-normalizer.js` and
-`register.js` only.
+`register.php` does **not** load `app.js`. It loads `i18n.js`,
+`phone-normalizer.js` and `register.js` only, and carries its own language
+switcher because it does not include the shared content header.
 
 **No page script monkey-patches `app.openService` any more.** Three hook scripts
 used to wrap it, so the destination of a dashboard tile depended on load order.
