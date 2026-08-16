@@ -141,6 +141,7 @@ node tests/browser/directory_flow.mjs
 node tests/browser/navigation_flow.mjs
 node tests/browser/language_flow.mjs    # Chichewa end to end
 node tests/browser/page_health.mjs      # every page, 320→1280px
+node tests/browser/chichewa_overflow.mjs # Chichewa at 320/360/390px
 ```
 
 `tests/run.sh` includes structural gates that fail if the registration modal,
@@ -168,7 +169,7 @@ non-existent table, or a committed credential reappears.
 | `assets/js/phone-normalizer.js` | Canonical phone normalisation (browser) |
 | `assets/js/i18n.js` | Shared language state (`AgroLang`) |
 | `partials/` | `head`, `nav`, `footer`, `scripts`, `modals`, `content-screen`, `function-page` |
-| `p601229_AgroBusiness_MW.sql` | Full schema — 21 tables |
+| `p601229_AgroBusiness_MW.sql` | Schema of record — 24 tables, matches production |
 | `migrations/` | Additive migrations for existing deployments |
 | `.env` | Secrets (gitignored, never commit) |
 
@@ -196,19 +197,38 @@ can read errors. Routing via `?action=`:
 
 Registration is **not** here — it is `register.php`.
 
-## Database — 21 tables
+## Database — 24 tables
 
 `districts`, `crops`, `crop_prices`, `market_insights`, `sellers`,
 `seller_contact_details`, `seller_crops`, `buyers`, `buyer_contact_details`,
 `buyer_crops`, `farming_best_practices`, `pest_control_tips`,
 `basic_farming_info`, `community_qa`, `ratings`, `crowdsourced_prices`,
 `onboarding_applications`, `markets`, `price_overrides`, `admin_users`,
-`admin_login_attempts`.
+`admin_login_attempts`, `price_markets`, `price_areas`, `price_review_audit`.
 
-`p601229_AgroBusiness_MW.sql` is a complete schema of record — a fresh restore
-gives a working application. It was incomplete until 2026-08-16 (five tables and
-six `crowdsourced_prices` columns existed only in production). For an existing
-deployment see `migrations/2026-08-16-schema-of-record.sql`.
+`p601229_AgroBusiness_MW.sql` **is** the schema of record. It was regenerated on
+2026-08-16 from a production export and verified by restoring it and diffing
+`information_schema` against production: 156 columns, 66 indexes, 19 foreign keys
+and 24 engines, all identical. `tests/run.sh` fails if a table goes missing from
+it or if PHP queries a table it does not create.
+
+**If this file and production ever disagree, production wins** — correct the file,
+do not ALTER the live database to match it. For an existing deployment built from
+the old file see `migrations/2026-08-16-schema-of-record.sql`.
+
+Things the schema will tell you that the code does not:
+
+- `seller_contact_details` and `buyer_contact_details` each carry a
+  `whatsapp_number` column that **nothing reads yet** — the directory derives its
+  WhatsApp link from `phone_number`.
+- `price_markets` / `price_areas` are curated market and area lists with **no
+  reader in this repository**. They are `utf8mb4_unicode_ci` while every other
+  table is `utf8mb4_0900_ai_ci`; comparing a string column across that boundary
+  raises "Illegal mix of collations".
+- `price_review_audit` is read by `admin/price-audit.php`.
+- `crowdsourced_prices.area_id` exists but is NULL on every production row.
+- Contact tables enforce UNIQUE on `phone_number` and on `whatsapp_number`: one
+  contact row per number.
 
 `ratings` and `community_qa` are read but never written — seed-only today.
 

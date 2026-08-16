@@ -36,9 +36,19 @@ const step = (n, msg) => console.log(`${n}. ${msg}`);
 const assert = (cond, msg) => { console.log(`   ${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) process.exitCode = 1; };
 
 /* Choose Chichewa the way a reader would: it is persisted under the same key
-   app.js writes, so setting it here is equivalent to using the dashboard. */
-await page.goto(base + '/index.php', { waitUntil: 'domcontentloaded' });
-await page.evaluate(() => localStorage.setItem('preferredLanguage', 'ci'));
+   app.js writes, so seeding it here is equivalent to using the dashboard switcher.
+   Seeded with addInitScript so it is in place before any page script runs.
+   The earlier version visited index.php to set it and navigated away
+   immediately, which aborted app.js's in-flight connection check and logged a
+   console error that step 13 then reported as a failure — a defect in the test,
+   not the app. */
+await ctx.addInitScript(() => {
+  // Seed once. Setting it unconditionally would re-apply Chichewa on every
+  // navigation and undo the switch back to English in step 12.
+  try {
+    if (!localStorage.getItem('preferredLanguage')) localStorage.setItem('preferredLanguage', 'ci');
+  } catch (e) { /* blocked storage */ }
+});
 
 step(1, 'Registration comes up in Chichewa');
 await page.goto(base + '/register.php', { waitUntil: 'domcontentloaded' });
@@ -156,8 +166,11 @@ step(12, 'Buyers too, and English still works');
 await page.goto(base + '/buyers.php', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(2000);
 assert((await page.locator('.directory-hero').innerText()).includes('Pezani Ogula'), 'Find Buyers → Pezani Ogula');
-await page.evaluate(() => localStorage.setItem('preferredLanguage', 'en'));
-await page.goto(base + '/buyers.php', { waitUntil: 'domcontentloaded' });
+// The init script seeds 'ci' on every new document, so switch the page in place
+// via the same API the UI uses rather than fighting it with another navigation.
+await page.evaluate(() => window.AgroLang.set('en'));
+await page.waitForTimeout(600);
+assert((await page.locator('.directory-hero').innerText()).includes('Find Buyers'), 'directory re-rendered in English in place');
 await page.waitForTimeout(2000);
 assert((await page.locator('.directory-hero').innerText()).includes('Find Buyers'), 'English restored');
 await page.goto(base + '/register.php', { waitUntil: 'domcontentloaded' });

@@ -1,25 +1,66 @@
--- phpMyAdmin SQL Dump
--- version 5.2.2
--- https://www.phpmyadmin.net/
+-- AgroBusiness Malawi — schema of record
 --
--- Host: localhost:3306
--- Generation Time: Feb 16, 2026 at 09:57 AM
--- Server version: 8.0.44-cll-lve
--- PHP Version: 8.4.17
+-- Database: p601229_AgroBusiness_MW
+--
+-- Regenerated 2026-08-16 from a production export
+-- (phpMyAdmin 5.2.3, MySQL 8.0.46) so that this file and the live database
+-- agree. It had drifted badly: three tables and six columns existed only in
+-- production, and nine onboarding_applications columns were declared narrower
+-- here than they really are.
+--
+-- WHAT THIS FILE IS
+--   The complete structure of the live database. Restoring it into an empty
+--   database gives a working application. Structure comes from production
+--   verbatim; the seed data below is the project's own demo content, NOT a copy
+--   of production's rows (production currently holds placeholder "- TEST"
+--   directory entries and seeded price reports, which do not belong here).
+--
+-- WHAT THIS FILE IS NOT
+--   A migration. It uses plain CREATE TABLE, so it will stop with error 1050 on
+--   a database that already has these tables. To update an existing deployment
+--   see migrations/.
+--
+-- IF THIS FILE AND PRODUCTION EVER DISAGREE AGAIN, PRODUCTION WINS.
+-- Correct this file; do not ALTER the live database to match it.
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
-
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
 /*!40101 SET NAMES utf8mb4 */;
 
+-- --------------------------------------------------------
+
 --
--- Database: `p601229_AgroBusiness_MW`
+-- Table structure for table `admin_login_attempts`
 --
+
+CREATE TABLE `admin_login_attempts` (
+
+  `id` int NOT NULL,
+  `ip` varchar(45) NOT NULL,
+  `username` varchar(100) DEFAULT NULL,
+  `attempted_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `success` tinyint(1) NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `admin_users`
+--
+
+CREATE TABLE `admin_users` (
+
+  `id` int NOT NULL,
+  `username` varchar(100) NOT NULL,
+  `password_hash` varchar(255) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -28,6 +69,7 @@ SET time_zone = "+00:00";
 --
 
 CREATE TABLE `basic_farming_info` (
+
   `id` int NOT NULL,
   `topic` varchar(255) NOT NULL,
   `info_en` text NOT NULL,
@@ -46,6 +88,7 @@ INSERT INTO `basic_farming_info` (`id`, `topic`, `info_en`, `info_ci`) VALUES
 (5, 'Crop Rotation', 'Rotate legumes and cereals', 'Sinthanitsani nyemba ndi zingwe'),
 (6, 'Post-Harvest', 'Dry to 13% moisture content', 'Pukutani kufikira 13% m\"madzi');
 
+
 -- --------------------------------------------------------
 
 --
@@ -53,6 +96,7 @@ INSERT INTO `basic_farming_info` (`id`, `topic`, `info_en`, `info_ci`) VALUES
 --
 
 CREATE TABLE `buyers` (
+
   `id` int NOT NULL,
   `name` varchar(255) NOT NULL,
   `district_id` int NOT NULL,
@@ -80,15 +124,21 @@ INSERT INTO `buyers` (`id`, `name`, `district_id`, `contact_id`) VALUES
 (14, 'Wongani Zulu', 18, 14),
 (15, 'Madalitso Kamanga', 22, 15);
 
+
 -- --------------------------------------------------------
 
 --
 -- Table structure for table `buyer_contact_details`
 --
+-- Production exports this table with no ENGINE/CHARSET/COLLATE, so a restore
+-- would inherit the target database's defaults. Declared explicitly here to
+-- match the other tables and keep restores reproducible.
 
 CREATE TABLE `buyer_contact_details` (
+
   `id` int NOT NULL,
   `phone_number` varchar(20) DEFAULT NULL,
+  `whatsapp_number` varchar(20) DEFAULT NULL,
   `email` varchar(255) DEFAULT NULL,
   `address` text
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -97,6 +147,11 @@ CREATE TABLE `buyer_contact_details` (
 -- Dumping data for table `buyer_contact_details`
 --
 
+--
+-- NOTE: rows 17-23 were removed on regeneration. They duplicated rows 5-11
+-- exactly, no `buyers` row referenced them, and production's
+-- uniq_buyer_contact_phone UNIQUE key rejects a duplicate phone number.
+-- With them present this file could not be restored at all.
 INSERT INTO `buyer_contact_details` (`id`, `phone_number`, `email`, `address`) VALUES
 (1, '+123456789', 'john@example.com', '123 Farm Rd'),
 (2, '+987654321', 'jane@example.com', '456 Market St'),
@@ -113,15 +168,7 @@ INSERT INTO `buyer_contact_details` (`id`, `phone_number`, `email`, `address`) V
 (13, '+265 994 667788', 'chikondi@agro.mw', 'Rumphi Boma'),
 (14, '+265 882 778899', 'wongani@agro.mw', 'Karonga Lakeshore'),
 (15, '+265 991 889900', 'madalitso@agro.mw', 'Thyolo Tea Estate'),
-(16, '+265 880 990011', 'limbani@agro.mw', 'Chitipa Border Post'),
-(17, '+265 881 234567', 'mzuluwembe@agro.mw', 'Mzimba Rd, Area 3'),
-(18, '+265 992 345678', 'temwanani@agro.mw', 'Chileka Rd, Limbe'),
-(19, '+265 993 456789', 'chisomo@agro.mw', 'Mzuzu Highway'),
-(20, '+265 888 112233', 'taonane@agro.mw', 'M1 Road, Salima'),
-(21, '+265 999 223344', 'fatsani@agro.mw', 'Jenda Trading Centre'),
-(22, '+265 887 334455', 'dalitso@agro.mw', 'Dedza Mountain View'),
-(23, '+265 996 445566', 'mphatso@agro.mw', 'Kasungu Main Market');
-
+(16, '+265 880 990011', 'limbani@agro.mw', 'Chitipa Border Post');
 -- --------------------------------------------------------
 
 --
@@ -129,6 +176,7 @@ INSERT INTO `buyer_contact_details` (`id`, `phone_number`, `email`, `address`) V
 --
 
 CREATE TABLE `buyer_crops` (
+
   `buyer_id` int NOT NULL,
   `crop_id` int NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -151,6 +199,7 @@ INSERT INTO `buyer_crops` (`buyer_id`, `crop_id`) VALUES
 (6, 3),
 (8, 3);
 
+
 -- --------------------------------------------------------
 
 --
@@ -158,6 +207,7 @@ INSERT INTO `buyer_crops` (`buyer_id`, `crop_id`) VALUES
 --
 
 CREATE TABLE `community_qa` (
+
   `id` int NOT NULL,
   `district_id` int NOT NULL,
   `question_en` text NOT NULL,
@@ -173,6 +223,7 @@ CREATE TABLE `community_qa` (
 --
 
 CREATE TABLE `crops` (
+
   `id` int NOT NULL,
   `name` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -192,6 +243,7 @@ INSERT INTO `crops` (`id`, `name`) VALUES
 (7, 'Tea'),
 (2, 'Tobacco');
 
+
 -- --------------------------------------------------------
 
 --
@@ -199,6 +251,7 @@ INSERT INTO `crops` (`id`, `name`) VALUES
 --
 
 CREATE TABLE `crop_prices` (
+
   `id` int NOT NULL,
   `crop_id` int NOT NULL,
   `min_price` decimal(10,2) NOT NULL,
@@ -221,6 +274,40 @@ INSERT INTO `crop_prices` (`id`, `crop_id`, `min_price`, `market_price`, `unit`)
 (8, 8, 4000.00, 4500.00, 'kg'),
 (9, 9, 700.00, 850.00, 'kg');
 
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `crowdsourced_prices`
+--
+-- `area_id` is present but unused: every row in production has it NULL.
+-- Production exports this table with no ENGINE/CHARSET/COLLATE, so a restore
+-- would inherit the target database's defaults. Declared explicitly here to
+-- match the other tables and keep restores reproducible.
+
+CREATE TABLE `crowdsourced_prices` (
+
+  `id` int NOT NULL,
+  `crop_id` int NOT NULL,
+  `district_id` int DEFAULT NULL,
+  `price_per_kg` decimal(12,2) DEFAULT NULL,
+  `unit` varchar(20) DEFAULT 'kg',
+  `market_name` varchar(200) DEFAULT NULL,
+  `market_id` int DEFAULT NULL,
+  `area_id` int UNSIGNED DEFAULT NULL,
+  `submitted_by` varchar(50) DEFAULT NULL,
+  `email` varchar(200) DEFAULT NULL,
+  `channel` enum('web','ussd') DEFAULT 'web',
+  `verified` tinyint(1) DEFAULT '0',
+  `status` enum('pending','approved','rejected','flagged') NOT NULL DEFAULT 'pending',
+  `is_member` tinyint(1) NOT NULL DEFAULT '0',
+  `flag_reason` varchar(255) DEFAULT NULL,
+  `reviewed_by` varchar(50) DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `price_per_bag` decimal(12,2) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- --------------------------------------------------------
 
 --
@@ -228,6 +315,7 @@ INSERT INTO `crop_prices` (`id`, `crop_id`, `min_price`, `market_price`, `unit`)
 --
 
 CREATE TABLE `districts` (
+
   `id` int NOT NULL,
   `name` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -267,6 +355,7 @@ INSERT INTO `districts` (`id`, `name`) VALUES
 (11, 'Thyolo'),
 (15, 'Zomba');
 
+
 -- --------------------------------------------------------
 
 --
@@ -274,6 +363,7 @@ INSERT INTO `districts` (`id`, `name`) VALUES
 --
 
 CREATE TABLE `farming_best_practices` (
+
   `id` int NOT NULL,
   `crop_id` int NOT NULL,
   `practice_type` varchar(255) NOT NULL,
@@ -332,6 +422,24 @@ INSERT INTO `farming_best_practices` (`id`, `crop_id`, `practice_type`, `practic
 (44, 9, 'Harvesting', 'Harvest when pods are dry but before shattering, then dry on tarpaulins or raised mats.', 'Kololani makoko akauma koma asanaphwanye, kenako yanikani pa matenti kapena mphasa zokwezeka.'),
 (45, 9, 'Storage', 'Dry beans thoroughly, sort out damaged seed, and store in hermetic bags or clean sealed containers.', 'Yanikani nyemba bwino, chotsani zowonongeka, ndipo sungani mu matumba osalowa mpweya kapena ziwiya zoyera zotsekedwa.');
 
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `markets`
+--
+-- Find-or-create target for api.php's submit_price. The unique key is
+-- load-bearing: submit_price relies on INSERT IGNORE colliding, or every
+-- price report would create a duplicate market.
+
+CREATE TABLE `markets` (
+
+  `id` int NOT NULL,
+  `district_id` int NOT NULL,
+  `name` varchar(150) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- --------------------------------------------------------
 
 --
@@ -339,6 +447,7 @@ INSERT INTO `farming_best_practices` (`id`, `crop_id`, `practice_type`, `practic
 --
 
 CREATE TABLE `market_insights` (
+
   `id` int NOT NULL,
   `district_id` int NOT NULL,
   `insight_en` text NOT NULL,
@@ -375,6 +484,41 @@ INSERT INTO `market_insights` (`id`, `district_id`, `insight_en`, `insight_ci`) 
 (23, 23, 'Likoma fish prices rise as tourism season peaks', 'Mitengo ya nsomba mu Likoma ikwera panthawi ya ulendo'),
 (24, 24, 'Salima rice exports to Mozambique increase 25%', 'Kutulutsa mpunga ku Mozambique kwakwera 25% mu Salima');
 
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `onboarding_applications`
+--
+-- Written by register.php only. Contact numbers are stored canonically as
+-- E.164 (+265888123456) by config/phone.php — do not widen these columns to
+-- accept raw local input.
+-- Production exports this table with no ENGINE/CHARSET/COLLATE, so a restore
+-- would inherit the target database's defaults. Declared explicitly here to
+-- match the other tables and keep restores reproducible.
+
+CREATE TABLE `onboarding_applications` (
+
+  `id` int NOT NULL,
+  `application_ref` varchar(20) NOT NULL,
+  `user_type` enum('farmer','seller','buyer') NOT NULL,
+  `full_name` varchar(200) NOT NULL,
+  `phone_number` varchar(20) NOT NULL,
+  `whatsapp_number` varchar(30) DEFAULT NULL,
+  `email` varchar(200) DEFAULT NULL,
+  `national_id` varchar(50) DEFAULT NULL,
+  `district_id` int DEFAULT NULL,
+  `village` varchar(200) DEFAULT NULL,
+  `crops_of_interest` text,
+  `business_name` varchar(200) DEFAULT NULL,
+  `channel` enum('web','ussd') DEFAULT 'web',
+  `status` enum('pending','approved','denied') DEFAULT 'pending',
+  `admin_notes` text,
+  `denial_reason` varchar(500) DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `reviewed_at` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- --------------------------------------------------------
 
 --
@@ -382,6 +526,7 @@ INSERT INTO `market_insights` (`id`, `district_id`, `insight_en`, `insight_ci`) 
 --
 
 CREATE TABLE `pest_control_tips` (
+
   `id` int NOT NULL,
   `crop_id` int NOT NULL,
   `district_id` int NOT NULL,
@@ -425,6 +570,104 @@ INSERT INTO `pest_control_tips` (`id`, `crop_id`, `district_id`, `tip_en`, `tip_
 (29, 7, 25, 'In tea nurseries, prevent damping-off with sterile rooting media, raised benches, good drainage, and careful watering.', 'Mu nazale za tiyi, pewani damping-off ndi media yoyera, mabenchi okwezeka, madzi otuluka bwino, ndi kuthirira mosamala.'),
 (30, 8, 26, 'For coffee berry borer, collect fallen berries, strip leftover berries after harvest, and use alcohol-baited traps for monitoring.', 'Pa coffee berry borer, sonkhanitsani zipatso zagwa, chotsani zotsala mukatha kukolola, ndipo gwiritsani ma trap okhala ndi alcohol poyang_anira.');
 
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `price_areas`
+--
+-- Curated area/suburb list, sibling of price_markets. Same status: present
+-- in production, no current reader in the repository.
+-- NOTE: price_markets and price_areas are utf8mb4_unicode_ci while every
+-- other table is utf8mb4_0900_ai_ci. Comparing a string column across that
+-- boundary raises "Illegal mix of collations". Nothing does so today.
+
+CREATE TABLE `price_areas` (
+
+  `id` int UNSIGNED NOT NULL,
+  `district_id` int NOT NULL,
+  `name` varchar(180) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `city_name` varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `price_markets`
+--
+-- Curated market list for price reporting. Distinct from `markets`, which
+-- api.php's submit_price find-or-creates. No code in the repository reads
+-- this today; it is here because production has it, with real data.
+
+CREATE TABLE `price_markets` (
+
+  `id` int UNSIGNED NOT NULL,
+  `district_id` int NOT NULL,
+  `name` varchar(180) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `price_overrides`
+--
+
+CREATE TABLE `price_overrides` (
+
+  `id` int NOT NULL,
+  `crop_id` int NOT NULL,
+  `district_id` int NOT NULL DEFAULT '0',
+  `price_per_kg` decimal(10,2) NOT NULL,
+  `note` varchar(255) DEFAULT NULL,
+  `set_by` varchar(50) NOT NULL DEFAULT 'admin',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `price_review_audit`
+--
+-- Audit trail for community price moderation. READ BY admin/price-audit.php.
+-- This table was missing from this file entirely, so a fresh restore made
+-- that admin page fail with "Table doesn't exist".
+
+CREATE TABLE `price_review_audit` (
+
+  `id` bigint UNSIGNED NOT NULL,
+  `price_report_id` int NOT NULL,
+  `event_type` varchar(30) NOT NULL,
+  `crop_id` int DEFAULT NULL,
+  `district_id` int DEFAULT NULL,
+  `market_name` varchar(150) DEFAULT NULL,
+  `price_per_kg` decimal(12,2) DEFAULT NULL,
+  `price_per_bag` decimal(12,2) DEFAULT NULL,
+  `unit` varchar(50) DEFAULT NULL,
+  `submitted_by` varchar(255) DEFAULT NULL,
+  `channel` varchar(50) DEFAULT NULL,
+  `verified` tinyint(1) DEFAULT NULL,
+  `status` varchar(50) DEFAULT NULL,
+  `is_member` tinyint(1) DEFAULT NULL,
+  `flag_reason` text,
+  `reviewed_by` varchar(255) DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `old_status` varchar(50) DEFAULT NULL,
+  `new_status` varchar(50) DEFAULT NULL,
+  `old_price_per_kg` decimal(12,2) DEFAULT NULL,
+  `new_price_per_kg` decimal(12,2) DEFAULT NULL,
+  `old_price_per_bag` decimal(12,2) DEFAULT NULL,
+  `new_price_per_bag` decimal(12,2) DEFAULT NULL,
+  `old_market_name` varchar(150) DEFAULT NULL,
+  `new_market_name` varchar(150) DEFAULT NULL,
+  `old_flag_reason` text,
+  `new_flag_reason` text,
+  `event_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- --------------------------------------------------------
 
 --
@@ -432,11 +675,12 @@ INSERT INTO `pest_control_tips` (`id`, `crop_id`, `district_id`, `tip_en`, `tip_
 --
 
 CREATE TABLE `ratings` (
+
   `id` int NOT NULL,
   `seller_id` int NOT NULL,
   `rating_value` int NOT NULL,
   `review` text
-) ;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `ratings`
@@ -463,6 +707,7 @@ INSERT INTO `ratings` (`id`, `seller_id`, `rating_value`, `review`) VALUES
 (18, 17, 3, 'Variable bean sizes'),
 (19, 20, 5, 'Premium rice quality');
 
+
 -- --------------------------------------------------------
 
 --
@@ -470,6 +715,7 @@ INSERT INTO `ratings` (`id`, `seller_id`, `rating_value`, `review`) VALUES
 --
 
 CREATE TABLE `sellers` (
+
   `id` int NOT NULL,
   `name` varchar(255) NOT NULL,
   `district_id` int NOT NULL,
@@ -502,15 +748,21 @@ INSERT INTO `sellers` (`id`, `name`, `district_id`, `contact_id`) VALUES
 (19, 'Chisomo Tembo', 19, 19),
 (20, 'Mary Kamanga', 24, 20);
 
+
 -- --------------------------------------------------------
 
 --
 -- Table structure for table `seller_contact_details`
 --
+-- Production exports this table with no ENGINE/CHARSET/COLLATE, so a restore
+-- would inherit the target database's defaults. Declared explicitly here to
+-- match the other tables and keep restores reproducible.
 
 CREATE TABLE `seller_contact_details` (
+
   `id` int NOT NULL,
   `phone_number` varchar(20) DEFAULT NULL,
+  `whatsapp_number` varchar(20) DEFAULT NULL,
   `email` varchar(255) DEFAULT NULL,
   `address` text
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -541,6 +793,7 @@ INSERT INTO `seller_contact_details` (`id`, `phone_number`, `email`, `address`) 
 (19, '+265 889 012 345', 'chisomo@agro.mw', 'Mulanje Tea Market'),
 (20, '+265 990 123 456', 'mary@agro.mw', 'Salima Lakeshore');
 
+
 -- --------------------------------------------------------
 
 --
@@ -548,6 +801,7 @@ INSERT INTO `seller_contact_details` (`id`, `phone_number`, `email`, `address`) 
 --
 
 CREATE TABLE `seller_crops` (
+
   `seller_id` int NOT NULL,
   `crop_id` int NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -598,9 +852,24 @@ INSERT INTO `seller_crops` (`seller_id`, `crop_id`) VALUES
 (17, 9),
 (19, 9);
 
+
 --
 -- Indexes for dumped tables
 --
+
+--
+-- Indexes for table `admin_login_attempts`
+--
+ALTER TABLE `admin_login_attempts`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_ip_time` (`ip`,`attempted_at`);
+
+--
+-- Indexes for table `admin_users`
+--
+ALTER TABLE `admin_users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `username` (`username`);
 
 --
 -- Indexes for table `basic_farming_info`
@@ -613,14 +882,16 @@ ALTER TABLE `basic_farming_info`
 --
 ALTER TABLE `buyers`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `district_id` (`district_id`),
-  ADD KEY `buyers_ibfk_2` (`contact_id`);
+  ADD UNIQUE KEY `uniq_buyers_contact` (`contact_id`),
+  ADD KEY `district_id` (`district_id`);
 
 --
 -- Indexes for table `buyer_contact_details`
 --
 ALTER TABLE `buyer_contact_details`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_buyer_contact_phone` (`phone_number`),
+  ADD UNIQUE KEY `uniq_buyer_whatsapp` (`whatsapp_number`);
 
 --
 -- Indexes for table `buyer_crops`
@@ -641,7 +912,7 @@ ALTER TABLE `community_qa`
 --
 ALTER TABLE `crops`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `name` (`name`);
+  ADD UNIQUE KEY `uniq_crops_name` (`name`);
 
 --
 -- Indexes for table `crop_prices`
@@ -649,6 +920,18 @@ ALTER TABLE `crops`
 ALTER TABLE `crop_prices`
   ADD PRIMARY KEY (`id`),
   ADD KEY `crop_id` (`crop_id`);
+
+--
+-- Indexes for table `crowdsourced_prices`
+--
+ALTER TABLE `crowdsourced_prices`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_cp_status_crop_district` (`status`,`crop_id`,`district_id`),
+  ADD KEY `fk_crowdsourced_prices_district` (`district_id`),
+  ADD KEY `idx_crowdsourced_crop_district` (`crop_id`,`district_id`),
+  ADD KEY `idx_crowdsourced_market_crop` (`market_id`,`crop_id`),
+  ADD KEY `idx_crowdsourced_status_created` (`status`,`created_at`),
+  ADD KEY `idx_cp_area` (`area_id`);
 
 --
 -- Indexes for table `districts`
@@ -662,7 +945,16 @@ ALTER TABLE `districts`
 --
 ALTER TABLE `farming_best_practices`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `crop_id` (`crop_id`,`practice_type`);
+  ADD UNIQUE KEY `crop_id` (`crop_id`,`practice_type`),
+  ADD KEY `idx_best_practices_crop_integrity` (`crop_id`);
+
+--
+-- Indexes for table `markets`
+--
+ALTER TABLE `markets`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_district_market` (`district_id`,`name`),
+  ADD KEY `idx_markets_district` (`district_id`);
 
 --
 -- Indexes for table `market_insights`
@@ -672,12 +964,54 @@ ALTER TABLE `market_insights`
   ADD KEY `district_id` (`district_id`);
 
 --
+-- Indexes for table `onboarding_applications`
+--
+ALTER TABLE `onboarding_applications`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `application_ref` (`application_ref`),
+  ADD KEY `idx_onboarding_district_integrity` (`district_id`),
+  ADD KEY `idx_onboarding_whatsapp` (`whatsapp_number`);
+
+--
 -- Indexes for table `pest_control_tips`
 --
 ALTER TABLE `pest_control_tips`
   ADD PRIMARY KEY (`id`),
   ADD KEY `crop_id` (`crop_id`),
   ADD KEY `district_id` (`district_id`);
+
+--
+-- Indexes for table `price_areas`
+--
+ALTER TABLE `price_areas`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_price_area` (`district_id`,`name`),
+  ADD KEY `idx_price_area_district` (`district_id`);
+
+--
+-- Indexes for table `price_markets`
+--
+ALTER TABLE `price_markets`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_price_market` (`district_id`,`name`),
+  ADD KEY `idx_price_market_district` (`district_id`);
+
+--
+-- Indexes for table `price_overrides`
+--
+ALTER TABLE `price_overrides`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_crop_district` (`crop_id`,`district_id`);
+
+--
+-- Indexes for table `price_review_audit`
+--
+ALTER TABLE `price_review_audit`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_price_audit_report` (`price_report_id`,`event_at`),
+  ADD KEY `idx_price_audit_event` (`event_type`,`event_at`),
+  ADD KEY `idx_price_audit_status` (`status`,`event_at`),
+  ADD KEY `idx_price_audit_reviewer` (`reviewed_by`,`event_at`);
 
 --
 -- Indexes for table `ratings`
@@ -691,14 +1025,16 @@ ALTER TABLE `ratings`
 --
 ALTER TABLE `sellers`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `district_id` (`district_id`),
-  ADD KEY `sellers_ibfk_2` (`contact_id`);
+  ADD UNIQUE KEY `uniq_sellers_contact` (`contact_id`),
+  ADD KEY `district_id` (`district_id`);
 
 --
 -- Indexes for table `seller_contact_details`
 --
 ALTER TABLE `seller_contact_details`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_seller_contact_phone` (`phone_number`),
+  ADD UNIQUE KEY `uniq_seller_whatsapp` (`whatsapp_number`);
 
 --
 -- Indexes for table `seller_crops`
@@ -712,40 +1048,58 @@ ALTER TABLE `seller_crops`
 --
 
 --
+-- AUTO_INCREMENT for table `admin_login_attempts`
+--
+ALTER TABLE `admin_login_attempts`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
+-- AUTO_INCREMENT for table `admin_users`
+--
+ALTER TABLE `admin_users`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
 -- AUTO_INCREMENT for table `basic_farming_info`
 --
 ALTER TABLE `basic_farming_info`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=47;
 
 --
 -- AUTO_INCREMENT for table `buyers`
 --
 ALTER TABLE `buyers`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
 
 --
 -- AUTO_INCREMENT for table `buyer_contact_details`
 --
 ALTER TABLE `buyer_contact_details`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `community_qa`
 --
 ALTER TABLE `community_qa`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
 
 --
 -- AUTO_INCREMENT for table `crops`
 --
 ALTER TABLE `crops`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- AUTO_INCREMENT for table `crop_prices`
 --
 ALTER TABLE `crop_prices`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+
+--
+-- AUTO_INCREMENT for table `crowdsourced_prices`
+--
+ALTER TABLE `crowdsourced_prices`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `districts`
@@ -757,37 +1111,73 @@ ALTER TABLE `districts`
 -- AUTO_INCREMENT for table `farming_best_practices`
 --
 ALTER TABLE `farming_best_practices`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=46;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=87;
+
+--
+-- AUTO_INCREMENT for table `markets`
+--
+ALTER TABLE `markets`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=333;
 
 --
 -- AUTO_INCREMENT for table `market_insights`
 --
 ALTER TABLE `market_insights`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
+
+--
+-- AUTO_INCREMENT for table `onboarding_applications`
+--
+ALTER TABLE `onboarding_applications`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `pest_control_tips`
 --
 ALTER TABLE `pest_control_tips`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=31;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=410;
+
+--
+-- AUTO_INCREMENT for table `price_areas`
+--
+ALTER TABLE `price_areas`
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=217;
+
+--
+-- AUTO_INCREMENT for table `price_markets`
+--
+ALTER TABLE `price_markets`
+  MODIFY `id` int UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=121;
+
+--
+-- AUTO_INCREMENT for table `price_overrides`
+--
+ALTER TABLE `price_overrides`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `price_review_audit`
+--
+ALTER TABLE `price_review_audit`
+  MODIFY `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=541;
 
 --
 -- AUTO_INCREMENT for table `ratings`
 --
 ALTER TABLE `ratings`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
 
 --
 -- AUTO_INCREMENT for table `sellers`
 --
 ALTER TABLE `sellers`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `seller_contact_details`
 --
 ALTER TABLE `seller_contact_details`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- Constraints for dumped tables
@@ -797,220 +1187,85 @@ ALTER TABLE `seller_contact_details`
 -- Constraints for table `buyers`
 --
 ALTER TABLE `buyers`
-  ADD CONSTRAINT `buyers_ibfk_1` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`),
-  ADD CONSTRAINT `buyers_ibfk_2` FOREIGN KEY (`contact_id`) REFERENCES `buyer_contact_details` (`id`);
+  ADD CONSTRAINT `fk_buyers_contact` FOREIGN KEY (`contact_id`) REFERENCES `buyer_contact_details` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_buyers_district` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 --
 -- Constraints for table `buyer_crops`
 --
 ALTER TABLE `buyer_crops`
-  ADD CONSTRAINT `buyer_crops_ibfk_1` FOREIGN KEY (`buyer_id`) REFERENCES `buyers` (`id`),
-  ADD CONSTRAINT `buyer_crops_ibfk_2` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`);
+  ADD CONSTRAINT `fk_buyer_crops_buyer` FOREIGN KEY (`buyer_id`) REFERENCES `buyers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_buyer_crops_crop` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 --
 -- Constraints for table `community_qa`
 --
 ALTER TABLE `community_qa`
-  ADD CONSTRAINT `community_qa_ibfk_1` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`);
+  ADD CONSTRAINT `fk_community_qa_district` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 --
 -- Constraints for table `crop_prices`
 --
 ALTER TABLE `crop_prices`
-  ADD CONSTRAINT `crop_prices_ibfk_1` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`);
+  ADD CONSTRAINT `fk_crop_prices_crop` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+--
+-- Constraints for table `crowdsourced_prices`
+--
+ALTER TABLE `crowdsourced_prices`
+  ADD CONSTRAINT `fk_crowdsourced_prices_crop` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_crowdsourced_prices_district` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 --
 -- Constraints for table `farming_best_practices`
 --
 ALTER TABLE `farming_best_practices`
-  ADD CONSTRAINT `farming_best_practices_ibfk_1` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`);
+  ADD CONSTRAINT `fk_farming_best_practices_crop` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+--
+-- Constraints for table `markets`
+--
+ALTER TABLE `markets`
+  ADD CONSTRAINT `fk_markets_district` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 --
 -- Constraints for table `market_insights`
 --
 ALTER TABLE `market_insights`
-  ADD CONSTRAINT `market_insights_ibfk_1` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`);
+  ADD CONSTRAINT `fk_market_insights_district` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+--
+-- Constraints for table `onboarding_applications`
+--
+ALTER TABLE `onboarding_applications`
+  ADD CONSTRAINT `fk_onboarding_applications_district` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `pest_control_tips`
 --
 ALTER TABLE `pest_control_tips`
-  ADD CONSTRAINT `pest_control_tips_ibfk_1` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`),
-  ADD CONSTRAINT `pest_control_tips_ibfk_2` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`);
+  ADD CONSTRAINT `fk_pest_control_tips_crop` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_pest_control_tips_district` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 --
 -- Constraints for table `ratings`
 --
 ALTER TABLE `ratings`
-  ADD CONSTRAINT `ratings_ibfk_1` FOREIGN KEY (`seller_id`) REFERENCES `sellers` (`id`);
+  ADD CONSTRAINT `fk_ratings_seller` FOREIGN KEY (`seller_id`) REFERENCES `sellers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `sellers`
 --
 ALTER TABLE `sellers`
-  ADD CONSTRAINT `sellers_ibfk_1` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`),
-  ADD CONSTRAINT `sellers_ibfk_2` FOREIGN KEY (`contact_id`) REFERENCES `seller_contact_details` (`id`);
+  ADD CONSTRAINT `fk_sellers_contact` FOREIGN KEY (`contact_id`) REFERENCES `seller_contact_details` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_sellers_district` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 --
 -- Constraints for table `seller_crops`
 --
 ALTER TABLE `seller_crops`
-  ADD CONSTRAINT `seller_crops_ibfk_1` FOREIGN KEY (`seller_id`) REFERENCES `sellers` (`id`),
-  ADD CONSTRAINT `seller_crops_ibfk_2` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`);
---
--- Table structure for table `crowdsourced_prices`
---
-
-CREATE TABLE IF NOT EXISTS `crowdsourced_prices` (
-  `id`           int          NOT NULL AUTO_INCREMENT,
-  `crop_id`      int          NOT NULL,
-  `district_id`  int          DEFAULT NULL,
-  `price_per_kg` decimal(10,2) NOT NULL,
-  `unit`         varchar(20)  NOT NULL DEFAULT 'kg',
-  `market_name`  varchar(200) DEFAULT NULL,
-  `submitted_by` varchar(50)  NOT NULL DEFAULT 'anonymous',
-  `channel`      enum('web','ussd') NOT NULL DEFAULT 'web',
-  -- Community-price moderation columns. api.php's `submit_price` writes ALL of
-  -- these on every insert, so a database provisioned without them cannot accept
-  -- a single price report. They were live in production long before they were
-  -- written down here; see migrations/2026-08-16-schema-of-record.sql to add
-  -- them to an existing deployment.
-  `price_per_bag` decimal(10,2) DEFAULT NULL,
-  `market_id`     int          DEFAULT NULL,
-  `email`         varchar(200) DEFAULT NULL,
-  `status`        enum('pending','approved','flagged','rejected') NOT NULL DEFAULT 'pending',
-  `is_member`     tinyint(1)   NOT NULL DEFAULT 0,
-  `flag_reason`   varchar(255) DEFAULT NULL,
-  `created_at`   timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_status`      (`status`),
-  KEY `idx_crop_id`     (`crop_id`),
-  KEY `idx_district_id` (`district_id`),
-  KEY `idx_created_at`  (`created_at`),
-  CONSTRAINT `cp_crop_fk`     FOREIGN KEY (`crop_id`)     REFERENCES `crops`     (`id`),
-  CONSTRAINT `cp_district_fk` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-COMMIT;
-
--- =============================================================================
--- Tables that live in production but had no CREATE TABLE in this file.
---
--- Until 2026-08-16 this dump was NOT a complete schema of record: five of the
--- application's tables existed only in the live database, so a fresh deployment
--- restored from this file came up with registration, the community price
--- reports and the admin panel all broken. The definitions below were
--- reconstructed from every query in the codebase that reads or writes them.
---
--- They are written IF NOT EXISTS and are additive only: running this file
--- against the live database will not alter or drop an existing table. If a
--- column type here disagrees with production, production wins — correct this
--- file, do not ALTER the live table to match it.
--- =============================================================================
-
---
--- Table structure for table `onboarding_applications`
--- Written by register.php; read by api.php (check_application) and admin/index.php.
---
-CREATE TABLE IF NOT EXISTS `onboarding_applications` (
-  `id`                int          NOT NULL AUTO_INCREMENT,
-  `application_ref`   varchar(24)  NOT NULL,
-  `user_type`         enum('farmer','seller','buyer') NOT NULL,
-  `full_name`         varchar(150) NOT NULL,
-  -- Contact numbers are stored canonically as E.164 (+265888123456).
-  -- config/phone.php and assets/js/phone-normalizer.js are the only writers of
-  -- this format; do not widen these columns to accept raw local input.
-  `phone_number`      varchar(20)  NOT NULL,
-  `whatsapp_number`   varchar(20)  DEFAULT NULL,
-  `email`             varchar(190) DEFAULT NULL,
-  `national_id`       varchar(32)  DEFAULT NULL,
-  `district_id`       int          DEFAULT NULL,
-  `village`           varchar(120) DEFAULT NULL,
-  `crops_of_interest` text         DEFAULT NULL,
-  `business_name`     varchar(150) DEFAULT NULL,
-  `channel`           enum('web','ussd') NOT NULL DEFAULT 'web',
-  `status`            enum('pending','approved','denied') NOT NULL DEFAULT 'pending',
-  `admin_notes`       text         DEFAULT NULL,
-  `denial_reason`     text         DEFAULT NULL,
-  `created_at`        timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `reviewed_at`       datetime     DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  -- The reference is handed to the applicant and is the only key the public
-  -- status lookup has, so it must be unique at the database level and not only
-  -- in the collision loop in register.php.
-  UNIQUE KEY `uniq_application_ref` (`application_ref`),
-  KEY `idx_phone`    (`phone_number`),
-  KEY `idx_whatsapp` (`whatsapp_number`),
-  KEY `idx_status`   (`status`),
-  KEY `idx_district` (`district_id`),
-  CONSTRAINT `oa_district_fk` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Table structure for table `markets`
--- Find-or-create target for community price reports (api.php `submit_price`).
---
-CREATE TABLE IF NOT EXISTS `markets` (
-  `id`          int          NOT NULL AUTO_INCREMENT,
-  `district_id` int          NOT NULL,
-  `name`        varchar(200) NOT NULL,
-  `created_at`  timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  -- REQUIRED, not decorative. api.php uses `INSERT IGNORE INTO markets` and then
-  -- selects the row back. Without this unique key the INSERT IGNORE never
-  -- collides, so every price report creates another copy of the same market and
-  -- the district's market list fills with duplicates.
-  UNIQUE KEY `uniq_district_market` (`district_id`, `name`),
-  CONSTRAINT `markets_district_fk` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Table structure for table `price_overrides`
--- Admin-set reference prices. Mirrors the lazily-created definition in
--- admin/index.php; district_id = 0 means "all districts" and is deliberately
--- NOT a foreign key for that reason.
---
-CREATE TABLE IF NOT EXISTS `price_overrides` (
-  `id`           int          NOT NULL AUTO_INCREMENT,
-  `crop_id`      int          NOT NULL,
-  `district_id`  int          NOT NULL DEFAULT 0,
-  `price_per_kg` decimal(10,2) NOT NULL,
-  `note`         varchar(255) DEFAULT NULL,
-  `set_by`       varchar(50)  NOT NULL DEFAULT 'admin',
-  `updated_at`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_crop_district` (`crop_id`, `district_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Table structure for table `admin_users`
--- One row. Seeded from .env on first run by api.php / admin/index.php.
--- Holds a bcrypt hash only; there is no plaintext credential anywhere.
---
-CREATE TABLE IF NOT EXISTS `admin_users` (
-  `id`            int          NOT NULL AUTO_INCREMENT,
-  `username`      varchar(100) NOT NULL,
-  `password_hash` varchar(255) NOT NULL,
-  `created_at`    timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`    timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_username` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Table structure for table `admin_login_attempts`
--- Failed/successful admin logins, for the login throttle in admin/index.php.
--- No password is ever recorded here.
---
-CREATE TABLE IF NOT EXISTS `admin_login_attempts` (
-  `id`           int          NOT NULL AUTO_INCREMENT,
-  `ip`           varchar(45)  NOT NULL,
-  `username`     varchar(100) DEFAULT NULL,
-  `attempted_at` datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `success`      tinyint(1)   NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  KEY `idx_ip_time` (`ip`, `attempted_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  ADD CONSTRAINT `fk_seller_crops_crop` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_seller_crops_seller` FOREIGN KEY (`seller_id`) REFERENCES `sellers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 COMMIT;
 

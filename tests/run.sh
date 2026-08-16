@@ -61,19 +61,38 @@ count=$(grep -rn "action=submit_application\|action=check_duplicate" \
 count=$(grep -c "function escapeHtml" assets/js/app.js)
 [ "$count" -eq 1 ]; report $? "exactly one escapeHtml helper in app.js (found $count)"
 
-# Tables that no schema creates. price_markets/price_areas were invented by an
-# earlier change and every query against them threw a fatal.
-count=$(grep -rn "price_markets\|price_areas" --include='*.php' --include='*.js' --include='*.sql' . 2>/dev/null | grep -v '^./.claude/' | wc -l)
-[ "$count" -eq 0 ]; report $? "no references to non-existent tables (found $count)"
 
 # Every table the code touches must exist in the schema of record.
 missing=""
-for table in onboarding_applications markets price_overrides admin_users \
-             admin_login_attempts crowdsourced_prices districts crops sellers \
-             buyers seller_contact_details buyer_contact_details; do
+for table in admin_login_attempts admin_users basic_farming_info \
+             buyer_contact_details buyer_crops buyers community_qa crop_prices \
+             crops crowdsourced_prices districts farming_best_practices \
+             market_insights markets onboarding_applications pest_control_tips \
+             price_areas price_markets price_overrides price_review_audit \
+             ratings seller_contact_details seller_crops sellers; do
     grep -q "CREATE TABLE IF NOT EXISTS \`$table\`\|CREATE TABLE \`$table\`" p601229_AgroBusiness_MW.sql || missing="$missing $table"
 done
-[ -z "$missing" ]; report $? "schema of record covers every table (missing:${missing:- none})"
+[ -z "$missing" ]; report $? "schema of record covers all 24 production tables (missing:${missing:- none})"
+
+# Every table the code touches must be in the schema of record. This is the check
+# that would have caught price_review_audit: admin/price-audit.php reads it, but
+# the schema file did not create it, so a fresh restore broke that page.
+missing=""
+for table in $(grep -rhoE '(FROM|JOIN|INTO|UPDATE|TABLE IF NOT EXISTS) `?[a-z_]+`?' \
+                  --include='*.php' . 2>/dev/null \
+              | grep -v '^./.claude/' \
+              | awk '{print $2}' | tr -d '`' | sort -u); do
+    case "$table" in
+        admin_login_attempts|admin_users|basic_farming_info|buyer_contact_details|\
+        buyer_crops|buyers|community_qa|crop_prices|crops|crowdsourced_prices|\
+        districts|farming_best_practices|market_insights|markets|\
+        onboarding_applications|pest_control_tips|price_areas|price_markets|\
+        price_overrides|price_review_audit|ratings|seller_contact_details|\
+        seller_crops|sellers)
+            grep -q "CREATE TABLE.*\`$table\`" p601229_AgroBusiness_MW.sql || missing="$missing $table" ;;
+    esac
+done
+[ -z "$missing" ]; report $? "every table referenced by PHP is in the schema (missing:${missing:- none})"
 
 # No credential may be committed. Documentation placeholders are fine
 # (DB_PASS=..., DB_PASS=your_password, DB_PASS=<value>); a value that looks real

@@ -77,7 +77,7 @@ show anything.
 
 ---
 
-## 3. Data model — 21 tables, all in the schema of record
+## 3. Data model — 24 tables, all in the schema of record
 
 | Table | Created by | Read by | Written by |
 |---|---|---|---|
@@ -103,8 +103,28 @@ show anything.
 | `admin_users` | **`.sql` — added 2026-08-16**, also lazily in `api.php` and `admin/index.php` | `admin/index.php` login | seeded once from `.env` |
 | `admin_login_attempts` | **`.sql` — added 2026-08-16**, also lazily in `admin/index.php` | login throttle | login handler |
 
+### Corrected 2026-08-16 against a production export
+
+An earlier pass of this map claimed `price_markets` and `price_areas` did not
+exist anywhere and called them invented. **That was wrong.** Both exist in
+production with real data (120 and 216 rows), as does `price_review_audit`,
+which `admin/price-audit.php` reads. They were missing from the *schema file*,
+not from the database, and that file has now been regenerated from production.
+
+| Table | Status |
+|---|---|
+| `price_markets` | production has it, 120 rows; no reader in the repo since `price-locations.php` was removed |
+| `price_areas` | production has it, 216 rows; same |
+| `price_review_audit` | production has it, 332 rows; **read by `admin/price-audit.php`** |
+
+Also recovered into the schema file: `whatsapp_number` on both contact tables
+(no reader yet), and `area_id` / `verified` / `reviewed_by` / `reviewed_at` on
+`crowdsourced_prices`.
+
 **The schema of record is now complete.** Verified by restoring
-`p601229_AgroBusiness_MW.sql` into an empty database: 21 tables, and the app runs
+`p601229_AgroBusiness_MW.sql` into an empty database and diffing
+`information_schema` against a production restore — 156 columns, 66 indexes,
+19 foreign keys, 24 engines, all identical — and the app runs
 against it — registration, price submission and every read path.
 
 Before this change the dump produced 16 tables, and registration, community

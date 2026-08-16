@@ -723,6 +723,100 @@ contention, not an application defect — but recorded, not dismissed.
 strings in `app.js` that were already English-only before this pass, and
 `privacy.php`. Registration and the directory were the scope.
 
+---
+
+## 2026-08-16 (later still) — SCHEMA OF RECORD RECONCILED AGAINST A REAL EXPORT
+
+The user supplied a production export (phpMyAdmin 5.2.3, MySQL 8.0.46). It was
+restored locally and compared against the repository. **It corrected one of my
+own findings from earlier today.**
+
+### The correction
+
+I had reported that `price_markets` and `price_areas` "exist in no schema
+anywhere" and deleted `price-locations.php` and `price-submit.php` on that
+basis. **Both tables exist in production**, with 120 and 216 rows. So does
+`price_review_audit` (332 rows), which `admin/price-audit.php` reads.
+
+What was actually true: they were missing from the *schema file*. I generalised
+from the file to the database, which is the same class of error the plan's
+standing rule 3 warns about — cite a line, then open the file and confirm. The
+deleted files would have worked against production. The other reasons for
+removing them (a second price-submission path bypassing member matching and the
+outlier gate) still stand, but that is a product decision and it is the user's,
+not a bug fix. **Restoring them is still on the table.**
+
+### What the export showed
+
+Schema file vs production, both directions:
+
+| Gap | Effect |
+|---|---|
+| `price_review_audit` missing | `admin/price-audit.php` fails outright on a fresh restore — reproduced |
+| `price_markets`, `price_areas` missing | 336 rows of reference data absent |
+| `whatsapp_number` missing on both contact tables | production has it; nothing reads it |
+| `area_id`, `verified`, `reviewed_by`, `reviewed_at` missing on `crowdsourced_prices` | `verified` set on 301 of 332 rows |
+| nine `onboarding_applications` columns declared too narrow | file was simply wrong |
+| 4 tables exported with no ENGINE/CHARSET/COLLATE | restore inherits target defaults, so it does not reproduce production |
+
+Plus one that stopped the file working at all: production enforces
+`UNIQUE (phone_number)` on the contact tables, and the repo's own seed data
+carried **seven duplicate `buyer_contact_details` rows** (17-23 duplicating
+5-11). Restoring the corrected file aborted at error 1062 until they were
+removed. They were orphans — no `buyers` row referenced them.
+
+### Done
+
+`p601229_AgroBusiness_MW.sql` regenerated from the production DDL, keeping the
+project's own seed data rather than production's placeholder rows. Verified the
+only way that counts: restore it, restore the production export, diff
+`information_schema`.
+
+**156 columns, 66 indexes, 19 foreign keys, 24 engines — all identical.**
+
+`migrations/2026-08-16-schema-of-record.sql` rewritten for deployments built
+from the old file: three CREATE TABLEs (idempotent, verified by running it
+twice) and commented ALTERs for the columns, with the SHOW COLUMNS checks to run
+first.
+
+### Gates
+
+- Old gate "no references to non-existent tables" **deleted** — it was built on
+  my wrong conclusion and forbade two legitimate tables.
+- New: schema of record must cover all 24 production tables.
+- New: every table any PHP file queries must exist in the schema file. This is
+  the general form of the rule, and it is what would have caught
+  `price_review_audit`.
+- Both canary-tested: removing a table from the file, or querying an absent one,
+  fails them.
+
+`bash tests/run.sh` — **60 passed, 0 failed**.
+
+### A "flake" that was not a flake
+
+I previously recorded a `language_flow.mjs` console-error failure as `php -S`
+single-threaded contention. It reproduced 2/2 when I looked again, so that
+diagnosis was wrong. Real cause: the test loaded `index.php`, set localStorage
+and navigated away immediately, aborting `app.js`'s in-flight connection check;
+the rejected fetch logged a console error the test then counted. A defect in the
+test, not the app. Fixed by seeding the language with `addInitScript` (once, so
+step 12 can still switch back to English). All four browser flows now pass back
+to back — registration 26, directory 30, navigation 20, language 46.
+
+**"Flaky" is not a diagnosis. It reproduced the moment I stopped assuming.**
+
+### Data findings — for the user, not code changes
+
+- **Every seller and buyer in production has NULL phone and NULL WhatsApp**, and
+  all 14 are named `- TEST` with `@test.agrobusinessmw.local` emails. The
+  contact-first directory currently has no contacts.
+- `seller_crops` and `buyer_crops` are **empty**, so no directory card shows crop
+  chips and the crop filter matches nothing.
+- 295 of 332 price reports are from `admin-seed` / `verify-test`.
+- `districts` holds 29 rows: Malawi's 28 plus `Mzuzu`, a city inside Mzimba.
+- The export has no `DROP TABLE IF EXISTS`, so it cannot be re-run over an
+  existing database (error 1050).
+
 ## Status log
 
 Append one line per completed cycle: `<date> · <objective> · <owner> · PASS|FAIL · <note>`
