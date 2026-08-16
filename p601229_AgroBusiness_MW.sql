@@ -870,13 +870,146 @@ CREATE TABLE IF NOT EXISTS `crowdsourced_prices` (
   `market_name`  varchar(200) DEFAULT NULL,
   `submitted_by` varchar(50)  NOT NULL DEFAULT 'anonymous',
   `channel`      enum('web','ussd') NOT NULL DEFAULT 'web',
+  -- Community-price moderation columns. api.php's `submit_price` writes ALL of
+  -- these on every insert, so a database provisioned without them cannot accept
+  -- a single price report. They were live in production long before they were
+  -- written down here; see migrations/2026-08-16-schema-of-record.sql to add
+  -- them to an existing deployment.
+  `price_per_bag` decimal(10,2) DEFAULT NULL,
+  `market_id`     int          DEFAULT NULL,
+  `email`         varchar(200) DEFAULT NULL,
+  `status`        enum('pending','approved','flagged','rejected') NOT NULL DEFAULT 'pending',
+  `is_member`     tinyint(1)   NOT NULL DEFAULT 0,
+  `flag_reason`   varchar(255) DEFAULT NULL,
   `created_at`   timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  KEY `idx_status`      (`status`),
   KEY `idx_crop_id`     (`crop_id`),
   KEY `idx_district_id` (`district_id`),
   KEY `idx_created_at`  (`created_at`),
   CONSTRAINT `cp_crop_fk`     FOREIGN KEY (`crop_id`)     REFERENCES `crops`     (`id`),
   CONSTRAINT `cp_district_fk` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+COMMIT;
+
+-- =============================================================================
+-- Tables that live in production but had no CREATE TABLE in this file.
+--
+-- Until 2026-08-16 this dump was NOT a complete schema of record: five of the
+-- application's tables existed only in the live database, so a fresh deployment
+-- restored from this file came up with registration, the community price
+-- reports and the admin panel all broken. The definitions below were
+-- reconstructed from every query in the codebase that reads or writes them.
+--
+-- They are written IF NOT EXISTS and are additive only: running this file
+-- against the live database will not alter or drop an existing table. If a
+-- column type here disagrees with production, production wins — correct this
+-- file, do not ALTER the live table to match it.
+-- =============================================================================
+
+--
+-- Table structure for table `onboarding_applications`
+-- Written by register.php; read by api.php (check_application) and admin/index.php.
+--
+CREATE TABLE IF NOT EXISTS `onboarding_applications` (
+  `id`                int          NOT NULL AUTO_INCREMENT,
+  `application_ref`   varchar(24)  NOT NULL,
+  `user_type`         enum('farmer','seller','buyer') NOT NULL,
+  `full_name`         varchar(150) NOT NULL,
+  -- Contact numbers are stored canonically as E.164 (+265888123456).
+  -- config/phone.php and assets/js/phone-normalizer.js are the only writers of
+  -- this format; do not widen these columns to accept raw local input.
+  `phone_number`      varchar(20)  NOT NULL,
+  `whatsapp_number`   varchar(20)  DEFAULT NULL,
+  `email`             varchar(190) DEFAULT NULL,
+  `national_id`       varchar(32)  DEFAULT NULL,
+  `district_id`       int          DEFAULT NULL,
+  `village`           varchar(120) DEFAULT NULL,
+  `crops_of_interest` text         DEFAULT NULL,
+  `business_name`     varchar(150) DEFAULT NULL,
+  `channel`           enum('web','ussd') NOT NULL DEFAULT 'web',
+  `status`            enum('pending','approved','denied') NOT NULL DEFAULT 'pending',
+  `admin_notes`       text         DEFAULT NULL,
+  `denial_reason`     text         DEFAULT NULL,
+  `created_at`        timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `reviewed_at`       datetime     DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  -- The reference is handed to the applicant and is the only key the public
+  -- status lookup has, so it must be unique at the database level and not only
+  -- in the collision loop in register.php.
+  UNIQUE KEY `uniq_application_ref` (`application_ref`),
+  KEY `idx_phone`    (`phone_number`),
+  KEY `idx_whatsapp` (`whatsapp_number`),
+  KEY `idx_status`   (`status`),
+  KEY `idx_district` (`district_id`),
+  CONSTRAINT `oa_district_fk` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Table structure for table `markets`
+-- Find-or-create target for community price reports (api.php `submit_price`).
+--
+CREATE TABLE IF NOT EXISTS `markets` (
+  `id`          int          NOT NULL AUTO_INCREMENT,
+  `district_id` int          NOT NULL,
+  `name`        varchar(200) NOT NULL,
+  `created_at`  timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  -- REQUIRED, not decorative. api.php uses `INSERT IGNORE INTO markets` and then
+  -- selects the row back. Without this unique key the INSERT IGNORE never
+  -- collides, so every price report creates another copy of the same market and
+  -- the district's market list fills with duplicates.
+  UNIQUE KEY `uniq_district_market` (`district_id`, `name`),
+  CONSTRAINT `markets_district_fk` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Table structure for table `price_overrides`
+-- Admin-set reference prices. Mirrors the lazily-created definition in
+-- admin/index.php; district_id = 0 means "all districts" and is deliberately
+-- NOT a foreign key for that reason.
+--
+CREATE TABLE IF NOT EXISTS `price_overrides` (
+  `id`           int          NOT NULL AUTO_INCREMENT,
+  `crop_id`      int          NOT NULL,
+  `district_id`  int          NOT NULL DEFAULT 0,
+  `price_per_kg` decimal(10,2) NOT NULL,
+  `note`         varchar(255) DEFAULT NULL,
+  `set_by`       varchar(50)  NOT NULL DEFAULT 'admin',
+  `updated_at`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_crop_district` (`crop_id`, `district_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Table structure for table `admin_users`
+-- One row. Seeded from .env on first run by api.php / admin/index.php.
+-- Holds a bcrypt hash only; there is no plaintext credential anywhere.
+--
+CREATE TABLE IF NOT EXISTS `admin_users` (
+  `id`            int          NOT NULL AUTO_INCREMENT,
+  `username`      varchar(100) NOT NULL,
+  `password_hash` varchar(255) NOT NULL,
+  `created_at`    timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`    timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Table structure for table `admin_login_attempts`
+-- Failed/successful admin logins, for the login throttle in admin/index.php.
+-- No password is ever recorded here.
+--
+CREATE TABLE IF NOT EXISTS `admin_login_attempts` (
+  `id`           int          NOT NULL AUTO_INCREMENT,
+  `ip`           varchar(45)  NOT NULL,
+  `username`     varchar(100) DEFAULT NULL,
+  `attempted_at` datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `success`      tinyint(1)   NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_ip_time` (`ip`, `attempted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 COMMIT;

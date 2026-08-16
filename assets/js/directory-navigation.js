@@ -22,7 +22,7 @@
     async function loadAll(type) {
         if (cache[type]) return cache[type];
         const apiType = type === 'seller' ? 'sellers' : 'buyers';
-        const response = await fetch('directory-api.php?type=' + apiType, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+        const response = await fetch('api.php?action=' + apiType, { headers: { Accept: 'application/json' }, cache: 'no-store' });
         if (!response.ok) throw new Error('Directory API HTTP ' + response.status);
         const data = await response.json();
         if (!data.success) throw new Error(data.error || 'Unable to load contacts');
@@ -37,12 +37,23 @@
         detailModal.className = 'modal';
         detailModal.innerHTML = '<div class="modal-backdrop" data-directory-close></div><div class="modal-content directory-detail-modal-content"><div class="modal-header"><h2 id="directory-detail-title">Contact</h2><button type="button" class="modal-close" data-directory-close aria-label="Close"><span class="material-symbols-rounded">close</span></button></div><div class="modal-body" id="directory-detail-body"></div></div>';
         document.body.appendChild(detailModal);
-        detailModal.addEventListener('click', function (e) {
-            if (!e.target.closest('[data-directory-close]')) return;
+        const close = () => {
             detailModal.classList.remove('active');
             if (history.state && history.state.directoryDetail) history.back();
+        };
+        detailModal.addEventListener('click', function (e) {
+            if (e.target.closest('[data-directory-close]')) close();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && detailModal.classList.contains('active')) close();
         });
         return detailModal;
+    }
+
+    // wa.me wants the number with no plus and no separators.
+    function whatsappLink(phone) {
+        const digits = String(phone || '').replace(/[^0-9]/g, '');
+        return digits.length >= 8 ? 'https://wa.me/' + digits : '';
     }
 
     function openDetail(row, type, push, district) {
@@ -53,19 +64,45 @@
         const title = document.getElementById('directory-detail-title');
         const body = document.getElementById('directory-detail-body');
         const crops = String(row.crops_display || '').split(',').map(s => s.trim()).filter(Boolean);
+        const wa = whatsappLink(row.phone_number);
         title.textContent = row.name || (type === 'seller' ? 'Seller' : 'Buyer');
-        body.innerHTML = '<div class="directory-contact-hero"><div class="directory-avatar">' + (type === 'seller' ? '🌾' : '🏢') + '</div><div><span class="directory-role">' + (type === 'seller' ? 'Seller' : 'Buyer') + '</span><h3>' + esc(row.name) + '</h3><p>' + esc(row.district_name || '') + (row.address ? ' · ' + esc(row.address) : '') + '</p></div></div>'
+
+        const actions = [];
+        if (row.phone_number) actions.push('<a class="directory-action primary" href="tel:' + esc(row.phone_number) + '"><span class="material-symbols-rounded" aria-hidden="true">call</span> Call</a>');
+        if (wa) actions.push('<a class="directory-action whatsapp" href="' + esc(wa) + '" target="_blank" rel="noopener noreferrer"><span class="material-symbols-rounded" aria-hidden="true">chat</span> WhatsApp</a>');
+        if (row.email) actions.push('<a class="directory-action" href="mailto:' + esc(row.email) + '"><span class="material-symbols-rounded" aria-hidden="true">mail</span> Email</a>');
+        actions.push('<button type="button" class="directory-action" id="directory-share-contact"><span class="material-symbols-rounded" aria-hidden="true">share</span> Share</button>');
+
+        body.innerHTML = '<div class="directory-contact-hero"><div class="directory-avatar" aria-hidden="true">' + (type === 'seller' ? '🌾' : '🏢') + '</div><div><span class="directory-role">' + (type === 'seller' ? 'Seller' : 'Buyer') + '</span><h3>' + esc(row.name) + '</h3><p>' + esc(row.district_name || '') + (row.address ? ' · ' + esc(row.address) : '') + '</p></div></div>'
             + (crops.length ? '<div class="directory-detail-section"><span class="directory-label">Crops</span><div class="directory-crop-list">' + crops.map(c => '<span>' + esc(c) + '</span>').join('') + '</div></div>' : '')
-            + '<div class="directory-detail-actions">'
-            + (row.phone_number ? '<a class="directory-action primary" href="tel:' + esc(row.phone_number) + '"><span class="material-symbols-rounded">call</span> Call</a>' : '')
-            + (row.email ? '<a class="directory-action" href="mailto:' + esc(row.email) + '"><span class="material-symbols-rounded">mail</span> Email</a>' : '')
-            + '<button type="button" class="directory-action" id="directory-share-contact"><span class="material-symbols-rounded">share</span> Share</button></div>';
-        document.getElementById('directory-share-contact').onclick = function () {
+            + (row.phone_number ? '<div class="directory-detail-section"><span class="directory-label">Phone</span><p class="directory-contact-value">' + esc(row.phone_number) + '</p></div>' : '')
+            + (row.email ? '<div class="directory-detail-section"><span class="directory-label">Email</span><p class="directory-contact-value">' + esc(row.email) + '</p></div>' : '')
+            + (!row.phone_number && !row.email ? '<p class="directory-no-contact">No contact details are on file for this listing yet.</p>' : '')
+            + '<div class="directory-detail-actions">' + actions.join('') + '</div>';
+
+        const shareBtn = document.getElementById('directory-share-contact');
+        shareBtn.addEventListener('click', function () {
             const url = location.href;
-            if (navigator.share) navigator.share({ title: row.name || type, url }).catch(() => {});
-            else if (navigator.clipboard) navigator.clipboard.writeText(url);
-        };
+            const shareData = { title: row.name || type, text: [row.name, row.district_name, row.phone_number].filter(Boolean).join(' · '), url };
+            if (navigator.share) { navigator.share(shareData).catch(() => {}); return; }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(() => {
+                    shareBtn.classList.add('copied');
+                    const label = shareBtn.lastChild;
+                    if (label) label.textContent = ' Link copied';
+                    setTimeout(() => { shareBtn.classList.remove('copied'); if (label) label.textContent = ' Share'; }, 2000);
+                }).catch(() => {});
+                return;
+            }
+            // Neither API available (older Android WebViews): show the URL so the
+            // user can copy it by hand rather than have the button do nothing.
+            window.prompt('Copy this link:', url);
+        });
+
         modal.classList.add('active');
+        // Focus the dialog so a keyboard or screen-reader user lands inside it.
+        const closeBtn = modal.querySelector('.modal-close');
+        if (closeBtn) closeBtn.focus();
     }
 
     async function render(type, rows, district) {
@@ -119,12 +156,15 @@
         const qs = new URLSearchParams(location.search);
         const id = Number(qs.get(directoryType + '_id') || 0);
         const district = qs.get('district_id') || '';
-        loadAll(directoryType).then(rows => {
+        loadAll(directoryType).then(async rows => {
+            // Always render the directory first. A shared link like
+            // sellers.php?seller_id=7 used to open the modal over an empty page,
+            // so closing it left the user staring at nothing.
+            await openDirectory(directoryType, district);
             if (id) {
                 const row = rows.find(r => Number(r.id) === id);
-                if (row) return openDetail(row, directoryType, false, district);
+                if (row) openDetail(row, directoryType, false, district);
             }
-            return openDirectory(directoryType, district);
         }).catch(error => {
             console.error('Directory start failed:', error);
             openDirectory(directoryType, district);
@@ -135,7 +175,8 @@
         const qs = new URLSearchParams(location.search);
         const id = Number(qs.get(directoryType + '_id') || 0);
         const district = qs.get('district_id') || '';
-        if (id) loadAll(directoryType).then(rows => {
+        if (id) loadAll(directoryType).then(async rows => {
+            await openDirectory(directoryType, district);
             const row = rows.find(r => Number(r.id) === id);
             if (row) openDetail(row, directoryType, false, district);
         });

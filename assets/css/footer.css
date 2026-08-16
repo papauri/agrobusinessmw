@@ -17,3 +17,11 @@ body>#content::after,body>#main-content::after{right:-.5rem;transform:scaleX(-1)
 @media (max-width:760px){.agro-shared-footer,.dash-footer{margin-top:2.5rem}.agro-footer-inner{padding:1.8rem 0 1.35rem}.agro-footer-art{width:155px;height:360px;bottom:-3rem;opacity:.08}.agro-footer-art-left{left:-2.5rem}.agro-footer-art-right{right:-2.5rem}.agro-footer-links{gap:.45rem .75rem;max-width:520px}.dash-footer::before,.dash-footer::after{width:135px;opacity:.07}body>#content::before,body>#content::after,body>#main-content::before,body>#main-content::after{width:90px;opacity:.035}}
 @media (max-width:430px){.agro-footer-art{width:110px;opacity:.055}.agro-footer-brand{margin-bottom:.85rem}.agro-footer-links{gap:.4rem .65rem}.dash-footer::before,.dash-footer::after{width:95px;opacity:.055}}
 @media (prefers-reduced-motion:reduce){.agro-footer-links a{transition:none}}
+
+/* Footer navigation is a real link list, not prose, so WCAG's inline-link
+   exemption does not apply. The links rendered 16px tall; give each one a full
+   44px row without changing the type size or the horizontal rhythm. */
+.agro-footer-links a{display:inline-flex;align-items:center;min-height:44px}
+.agro-footer-links{gap:0 .95rem}
+@media (max-width:760px){.agro-footer-links{gap:0 .75rem}}
+@media (max-width:430px){.agro-footer-links{gap:0 .65rem}}

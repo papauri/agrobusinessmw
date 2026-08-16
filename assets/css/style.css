@@ -4226,3 +4226,58 @@ html, body { max-width: 100%; overflow-x: hidden; }
     .modal { align-items: center; }
     .modal-content { border-radius: var(--radius-lg); }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   TOUCH TARGETS
+
+   WCAG 2.5.5 and every phone-usability guideline put the minimum tappable area
+   at 44x44 CSS pixels. Measured in Chromium across 320/360/390/430/768/1280,
+   the header and drawer controls were coming out between 25px and 42px tall —
+   small enough to miss repeatedly on a cheap phone held one-handed, which is
+   how most of this app's users hold it.
+
+   These rules set the hit area only. They deliberately do not change any colour,
+   border, icon size or spacing, so nothing looks different — the controls are
+   simply the size they always claimed to be. Centring keeps the glyph where it
+   already sat.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.back-btn,
+.nav-toggle,
+.share-btn,
+.home-btn,
+.app-nav-close,
+.modal-close,
+.lang-toggle,
+.lang-btn-content {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+/* The language switcher shows a flag, a code and an arrow, so it needs width
+   for its content but the same 44px height as its neighbours. */
+.lang-toggle,
+.lang-btn-content {
+    justify-content: center;
+    padding-inline: 0.5rem;
+    width: auto;
+}
+
+/* Footer and loader links sit in running text, where WCAG exempts inline links
+   from the target-size rule. The standalone ones still get a comfortable row. */
+.loader-privacy {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+}
+
+/* Sortable table headers act as buttons (sortable-table.js binds the click) and
+   were rendering 41px tall — just under the minimum. The matching rule lives in
+   sortable-table.js's injected stylesheet; this covers plain tables too. */
+table th {
+    height: 44px;
+}

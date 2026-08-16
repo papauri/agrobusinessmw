@@ -409,6 +409,223 @@ Close the gaps between what the schema promises and what the app delivers.
 
 ---
 
+---
+
+## 2026-08-16 — FINALISATION PASS (main session, live database)
+
+The whole application was audited and worked, not just the last feature touched.
+A scratch MariaDB was stood up from the schema of record and the app served
+against it, so the claims below come from execution. Where something could not
+be executed it is marked DEFERRED-TO-HUMAN and not ticked.
+
+### The finding that mattered most
+
+**`assets/js/register.js` did not parse.** `node --check` failed at line 111 —
+a missing closing paren. Registration on `main` had **zero JavaScript**: no
+districts, no crops, no validation, no submit. Every prior cycle's registration
+work was sitting behind a syntax error. Nothing in the plan mentioned it, because
+no cycle had run `node --check` over the file after editing it. `tests/run.sh`
+now lints every source file, and the browser flow test would have caught it too.
+
+### Registration is now a single implementation
+
+There were **three** flows writing to `onboarding_applications`:
+
+1. `register.php` + `register.js` (intended authority, broken)
+2. A modal in `partials/modals.php` + ~320 lines of `app.js` → `api.php?action=submit_application`
+3. `registration-contact-validation.js` → `registration-check.php` → `submit_application` → `registration-contact.php`
+
+They validated differently. (2) accepted `0888123456` raw via
+`/^\+?[0-9\s\-]{8,20}$/` and had no WhatsApp field at all, so the same person
+could exist in two formats depending on which path they hit. (3) ended in an
+**unauthenticated `UPDATE`** of an application's phone number.
+
+(2) and (3) are deleted. `register.php` owns registration end to end: render,
+`?action=preflight` duplicate check, POST submit, persistence, and the
+notification emails. `tests/run.sh` fails if a modal or a second endpoint returns.
+
+### Phone and WhatsApp canonicalisation
+
+One rule set, two implementations kept in lockstep: `config/phone.php` and
+`assets/js/phone-normalizer.js`. `0888123456` → `+265888123456` as specified.
+Explicit international numbers are trusted. **Ambiguous input is rejected, never
+guessed** — the previous code turned any bare 9-digit number into a +265 number,
+so a foreign number became a wrong Malawi number.
+
+Also caught: `265` + trunk zero (`2650888123456`) passes E.164 but is not a real
+number. Now rejected.
+
+Verified: 41 PHP cases, 44 JS cases, and a 39-input corpus diffed across both
+implementations for exact parity. `tests/phone_test.php` and
+`tests/phone_test.mjs` are the standing contract.
+
+### Two tables that never existed
+
+`price-locations.php` and `price-submit.php` queried **`price_markets` and
+`price_areas`**. Those tables appear in no schema, no migration, and no
+`CREATE TABLE` anywhere in the repository. `price-locations.php` returned HTTP
+500 on every request; `price-location-selector.js` swallowed it in a
+`console.warn` and silently did nothing, on a `MutationObserver` loop.
+`price-submit.php` also inserted `area_id` and `verified`, columns
+`crowdsourced_prices` does not have.
+
+All four files deleted. The working path — `api.php?action=submit_price` against
+the real `markets` table — was tested and kept.
+
+### Schema of record completed (objective 2.5 — DONE)
+
+Restoring `p601229_AgroBusiness_MW.sql` into an empty database used to give a
+**broken application**: 16 tables, with `onboarding_applications`, `markets`,
+`price_overrides`, `admin_users` and `admin_login_attempts` missing entirely, and
+`crowdsourced_prices` missing the six columns `submit_price` writes on every
+insert.
+
+The dump now restores **21 tables and a working app** — verified by doing it and
+then running registration and a price submission against the result.
+`migrations/2026-08-16-schema-of-record.sql` covers existing deployments.
+
+`markets` gained `UNIQUE (district_id, name)` — `INSERT IGNORE` needs it or every
+price report duplicates the market. Verified: two reports, one market row.
+
+### Registration took 30 seconds
+
+Measured: **30.4s** per POST. `register_notify()` opens two TLS sockets with a
+15s connect timeout each, synchronously, before the response was sent. The
+application was already committed; the farmer just sat watching "Submitting…".
+
+`register_respond_then_continue()` now flushes the JSON, closes the connection
+(`fastcgi_finish_request()` under PHP-FPM, `Content-Length` + flush elsewhere)
+and sends mail afterwards. SMTP connect timeout 15s → 8s.
+
+**30.4s → 0.010s.**
+
+### Contact-first directory and information-first insights
+
+`api.php`'s `sellers`, `buyers` and `market_insights` **required** `district_id`,
+which is why those pages opened a district modal before showing anything.
+`district_id` is now optional on all three.
+
+- Sellers/Buyers: `directory-api.php` (a second API file duplicating the query
+  with its own DB bootstrap) deleted; `directory-navigation.js` points at
+  `api.php`. Added a **WhatsApp** action, plain-text contact values, an empty
+  state for listings with no contact row, Escape-to-close, and a share fallback.
+- **Deep links were broken.** `sellers.php?seller_id=7` opened the contact over
+  an empty page; closing it left nothing. Now the directory renders behind it.
+- Market Insights fired **28 parallel requests** (one per district) on load and
+  on every filter change. Now **one**. Verified in-browser by counting requests.
+- Market Insights rendered `item.title`, `item.topic` and a "most recent update"
+  date. `market_insights` has four columns: `id, district_id, insight_en,
+  insight_ci`. There is no title, topic or date. Every card showed the same
+  placeholder heading and the stat tile showed the literal word "Latest".
+  Removed; cards are headed by district, which is real data.
+
+### One navigation system
+
+Three scripts monkey-patched `app.openService` — so where a dashboard tile went
+depended on script load order. That is the over-engineering the plan warned
+about. `openService` now routes to standalone pages itself; the hook files are
+deleted, and `_bootPage` skips pages that own a controller.
+
+### Security
+
+- **Error leakage closed.** `api.php`'s fatal handler returned the PHP message,
+  the absolute file path and the line number to the browser. The connection
+  handler returned `mysqli_connect_error()`, which names the database user and
+  host on an access-denied. Both now log the detail and serve a generic message.
+- **XSS.** Every remaining DB-derived value reaching `innerHTML` is escaped.
+  Fixed this pass: district picker (`d.name`, `d.region`, incl. a `data-name`
+  attribute), recent-district chips, crop action cards (replacing a hand-rolled
+  `"`-only replacement with the shared helper), and the markets datalist — which
+  carries **anonymous user input** (`submit_price` does find-or-create on
+  `market_name`) and is now built from DOM nodes.
+- The status panel and the registration review are built with `textContent` and
+  DOM nodes, not markup. Both render applicant free text.
+- Interpolated inline handlers: **4 remain**, every one a bare numeric PK. The
+  string-inside-a-JS-string-literal shape is gone.
+- Injection: prepared statements throughout; verified live with SQLi payloads in
+  `ref`, `district_id`, and applicant name — stored as literal text, tables intact.
+- `admin/index.php` untouched: session login, `password_verify`, CSRF on all six
+  POST handlers, throttle, and `htmlspecialchars` on every applicant field.
+  Re-read and confirmed; no demonstrated defect, so per the brief it was left alone.
+
+### UI / responsive
+
+13 pages × 6 widths (320/360/390/430/768/1280) in Chromium: **78 checks, zero
+horizontal overflow, zero console errors, zero failed same-origin requests.**
+
+Touch targets were 25–42px on the header controls, drawer close, modal close,
+language switcher, footer nav, directory search/select and table headers — all
+now ≥44px, hit area only, no visual change. The only sub-44px elements left are
+inline prose links, which WCAG 2.5.5 exempts.
+
+`register.css` was rewritten mobile-first on the `min-width` 480/768 ladder using
+`:root` tokens, with 16px inputs so iOS Safari does not zoom on focus.
+
+### Definition of Done — honest status
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | Both channels work | **PARTIAL** — web verified end to end; USSD untouched and unverifiable without a gateway. DEFERRED-TO-HUMAN |
+| 2 | No unverifiable claims | **MET** — all 14 actions exercised, shapes recorded in SYSTEM_MAP; every table read by code or noted as seed-only |
+| 3 | Security floor | **MET for the web channel** — prepared statements throughout, DB output escaped, no credential in the repo, error leakage closed. Admin is session+CSRF+throttle |
+| 4 | Bilingual parity | **NOT MET** — `app.js` keys are 44/44, but `register.php`/`register.js` and `directory-navigation.js` are English-only. See 3.5 below |
+| 5 | Accessible on a cheap phone | **MET on measurables** — no overflow 320→1280, 44px targets, labels associated, Escape closes modals. Contrast (3.2) still open |
+| 6 | One design system | **PARTIAL** — new CSS uses tokens and a min-width ladder; `style.css`'s existing `max-width` queries are unchanged (3.1 still open) |
+| 7 | Clean gate | **MET** — `bash tests/run.sh`: 57 passed, 0 failed. All 13 pages load with an empty console |
+| 8 | Docs match code | **MET** — CLAUDE.md and SYSTEM_MAP.md rewritten against the code and re-verified |
+
+**The project is NOT complete by its own definition.** Criteria 1, 4 and 6 are
+not met and 5 is partial. What was in front of me — registration, the schema,
+the directory, insights, security, responsive behaviour — is done and tested.
+
+### Objectives closed this pass
+
+- **0.2 Reconcile the docs** — `DONE`. Both documents rewritten against the code.
+- **2.5 Reconcile the schema of record** — `DONE`, verified by restore.
+- **3.4 Dead code removal** — `DONE` for the known members. `showCropDetails`
+  and its two private helpers deleted (zero call sites, confirmed again).
+  `directory-api.php`, the price-location subsystem and the hook scripts removed.
+- **1.3 XSS audit** — `DONE`. Remaining interpolations enumerated and classified.
+- **2.2 API action coverage** — `DONE`. All 14 curled, shapes in SYSTEM_MAP.
+- **3.3 Accessibility** — form labels associated (`register.php` rebuilt with
+  `for`/`id` throughout; the status input fixed); 44px targets met.
+
+### Still open, unchanged
+
+- **2.1** ratings / community Q&A write paths — product decision, not started.
+- **2.7** de-promotion on deny, and approve→deny→approve double promotion.
+  Still real. Needs a product decision plus a schema back-reference.
+- **3.1** breakpoint consolidation across `style.css`, `index.php`, `app.js`.
+- **3.2** contrast remediation (`--muted` 3.17:1, dark mode 3.63:1).
+- **3.5 NEW — bilingual parity beyond `app.js`.** `register.php`, `register.js`
+  and `directory-navigation.js` ship English-only strings. Registration is the
+  one form a farmer must complete, and it has no Chichewa. This blocks
+  completion criterion 4 and should be next.
+
+### DEFERRED-TO-HUMAN
+
+1. **Apply `migrations/2026-08-16-schema-of-record.sql` to production**, after
+   checking `SHOW COLUMNS FROM crowdsourced_prices` — the column ALTERs are
+   commented out because MySQL 8 has no `ADD COLUMN IF NOT EXISTS`.
+2. **Confirm the production `onboarding_applications` shape** matches the
+   reconstructed definition, particularly that `whatsapp_number` exists.
+3. **Outbound email** — never sent; no reachable SMTP here. The response-then-mail
+   change was verified by timing, not by a delivered message.
+4. **Admin approve/deny** — needs an admin session; not exercised.
+5. **USSD** — no gateway.
+6. **Legacy phone rows** — review `phone_number NOT LIKE '+%'` and correct by
+   hand. Deliberately not bulk-updated.
+
+### Method note for the next cycle
+
+Two of this pass's three most serious findings — the syntax error and the
+invented tables — were things **no amount of reading the plan would have
+surfaced**. They came from running `node --check` over every file and from
+loading every page in a browser. Standing rule 8: **before trusting any
+objective's premise, lint the whole tree and load every page.** The plan
+described work on top of a registration page that could not execute a single
+statement.
+
 ## Status log
 
 Append one line per completed cycle: `<date> · <objective> · <owner> · PASS|FAIL · <note>`

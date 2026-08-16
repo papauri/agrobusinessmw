@@ -11,11 +11,18 @@ register_shutdown_function(function () {
     if ($error && ($error['type'] === E_ERROR || $error['type'] === E_PARSE || $error['type'] === E_CORE_ERROR)) {
         if (ob_get_length()) ob_clean(); // Clear any partial HTML output
         header('Content-Type: application/json');
+        // The detail goes to the server log, NOT to the browser. This response
+        // used to carry the PHP message, the absolute file path and the line
+        // number, which handed any visitor a map of the server's filesystem.
+        error_log(sprintf(
+            'api.php fatal: %s in %s:%d',
+            $error['message'],
+            $error['file'],
+            $error['line']
+        ));
         echo json_encode([
             'success' => false,
-            'error' => 'Fatal PHP Error: ' . $error['message'],
-            'file' => $error['file'],
-            'line' => $error['line']
+            'error'   => 'The service hit an unexpected error. Please try again shortly.',
         ]);
         exit;
     }
@@ -93,173 +100,11 @@ function cp_reference_prices(mysqli $db, int $crop_id, ?int $district_id): array
     return $out;
 }
 
-/**
- * Send an HTML + plain-text multipart email via SMTPS (port 465 / implicit TLS).
- * Falls back to PHP mail() if the socket connection fails.
- *
- * @param string $to        Primary recipient address
- * @param string $subject   Email subject
- * @param string $htmlBody  Full HTML body
- * @param string $plainBody Plain-text fallback (auto-stripped from HTML if empty)
- * @param string $cc        Optional CC address (single address)
- * @return bool
- */
-function send_smtp_email(string $to, string $subject, string $htmlBody, string $plainBody = '', string $cc = ''): bool
-{
-    $smtpHost = trim($_ENV['Outgoing Server'] ?? 'blue.webhostingireland.ie');
-    $smtpPort = (int)trim($_ENV['SMTP Port']  ?? '465');
-    $smtpUser = trim($_ENV['Username']        ?? '');
-    $smtpPass = trim($_ENV['Password']        ?? '');
-    $fromAddr = $smtpUser ?: 'noreply@agrobusinessmw.com';
-    $fromName = 'AgroBusiness Malawi';
+// Shared branded-email helpers (send_smtp_email/email_html/email_row).
+require_once __DIR__ . '/config/mailer.php';
 
-    if ($plainBody === '') {
-        $plainBody = trim(strip_tags(preg_replace(['/<br\s*\/?>/i', '/<\/p>/i'], "\n", $htmlBody)));
-    }
-
-    $boundary = 'agro_' . md5(uniqid('', true));
-    $msgId    = '<' . uniqid('agro-') . '@agrobusinessmw.com>';
-
-    $ccLine = $cc ? "Cc: {$cc}\r\n" : '';
-    $rawMsg = "From: {$fromName} <{$fromAddr}>\r\n"
-            . "To: {$to}\r\n"
-            . $ccLine
-            . "Subject: =?UTF-8?B?" . base64_encode($subject) . "?=\r\n"
-            . "Message-ID: {$msgId}\r\n"
-            . "Date: " . date('r') . "\r\n"
-            . "MIME-Version: 1.0\r\n"
-            . "Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n"
-            . "\r\n"
-            . "--{$boundary}\r\n"
-            . "Content-Type: text/plain; charset=utf-8\r\n"
-            . "Content-Transfer-Encoding: 8bit\r\n"
-            . "\r\n"
-            . $plainBody . "\r\n"
-            . "--{$boundary}\r\n"
-            . "Content-Type: text/html; charset=utf-8\r\n"
-            . "Content-Transfer-Encoding: 8bit\r\n"
-            . "\r\n"
-            . $htmlBody . "\r\n"
-            . "--{$boundary}--";
-
-    // Dot-stuffing: lone dots on a line must be doubled
-    $rawMsg = preg_replace('/^\.$/m', '..', $rawMsg);
-
-    $ctx = stream_context_create([
-        'ssl' => [
-            // Peer verification disabled for shared-hosting certs not in local CA bundle.
-            // Connection is still encrypted.
-            'verify_peer'       => false,
-            'verify_peer_name'  => false,
-            'allow_self_signed' => true,
-        ],
-    ]);
-
-    $socket = @stream_socket_client(
-        "ssl://{$smtpHost}:{$smtpPort}",
-        $errno,
-        $errstr,
-        15,
-        STREAM_CLIENT_CONNECT,
-        $ctx
-    );
-
-    if (!$socket) {
-        $headers = "From: {$fromName} <{$fromAddr}>\r\n"
-                 . ($cc ? "Cc: {$cc}\r\n" : '')
-                 . "MIME-Version: 1.0\r\n"
-                 . "Content-Type: text/html; charset=utf-8";
-        return @mail($to, $subject, $htmlBody, $headers);
-    }
-
-    stream_set_timeout($socket, 10);
-
-    $readResp = function () use ($socket): string {
-        $last = '';
-        while (true) {
-            $line = fgets($socket, 1024);
-            if ($line === false || $line === '') break;
-            $last = $line;
-            if (strlen($line) >= 4 && $line[3] !== '-') break;
-        }
-        return $last;
-    };
-    $write = function (string $cmd) use ($socket): void { fwrite($socket, $cmd . "\r\n"); };
-
-    $readResp(); // greeting
-    $helo = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $write("EHLO {$helo}");
-    $readResp();
-
-    $write('AUTH LOGIN');
-    $readResp();
-    $write(base64_encode($smtpUser));
-    $readResp();
-    $write(base64_encode($smtpPass));
-    $authResp = $readResp();
-
-    if (substr($authResp, 0, 3) !== '235') {
-        $write('QUIT');
-        fclose($socket);
-        return false;
-    }
-
-    $write("MAIL FROM:<{$fromAddr}>");
-    $readResp();
-    $write("RCPT TO:<{$to}>");
-    $readResp();
-    if ($cc) {
-        $write("RCPT TO:<{$cc}>");
-        $readResp();
-    }
-    $write('DATA');
-    $readResp();
-
-    fwrite($socket, $rawMsg . "\r\n.\r\n");
-    $dataResp = $readResp();
-
-    $write('QUIT');
-    $readResp();
-    fclose($socket);
-
-    return substr($dataResp, 0, 3) === '250';
-}
-
-/**
- * Wrap content in the branded HTML email shell.
- */
-function email_html(string $bodyContent): string
-{
-    return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
-        . '<body style="margin:0;padding:0;background:#f5f2eb;font-family:Arial,Helvetica,sans-serif;">'
-        . '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f2eb;">'
-        . '<tr><td align="center" style="padding:40px 16px;">'
-        . '<table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">'
-        // Header
-        . '<tr><td style="background:#16a34a;padding:28px 36px;">'
-        . '<p style="margin:0;font-size:11px;color:#bbf7d0;letter-spacing:0.12em;text-transform:uppercase;">AgroBusiness Malawi</p>'
-        . '<h1 style="margin:4px 0 0;color:#ffffff;font-size:22px;font-weight:700;line-height:1.3;">Agricultural Platform</h1>'
-        . '</td></tr>'
-        // Body
-        . '<tr><td style="padding:36px;">'
-        . $bodyContent
-        . '</td></tr>'
-        // Footer
-        . '<tr><td style="background:#f5f2eb;padding:20px 36px;border-top:1px solid #e5e0d8;">'
-        . '<p style="margin:0;font-size:12px;color:#8B7355;text-align:center;">AgroBusiness Malawi &bull; Empowering Malawian Farmers<br>'
-        . '<a href="https://agrobusinessmw.com" style="color:#16a34a;text-decoration:none;">agrobusinessmw.com</a></p>'
-        . '</td></tr>'
-        . '</table></td></tr></table></body></html>';
-}
-
-/** Reusable info row for detail tables in admin notification emails. */
-function email_row(string $label, string $value): string
-{
-    return '<tr>'
-        . '<td style="padding:8px 12px;font-size:13px;color:#6b7280;width:130px;border-bottom:1px solid #f0ece4;">' . htmlspecialchars($label) . '</td>'
-        . '<td style="padding:8px 12px;font-size:13px;color:#1f2937;font-weight:600;border-bottom:1px solid #f0ece4;">' . htmlspecialchars($value) . '</td>'
-        . '</tr>';
-}
+// Canonical phone normalisation, shared with register.php and the browser.
+require_once __DIR__ . '/config/phone.php';
 
 // Set JSON header & CORS
 header('Content-Type: application/json; charset=utf-8');
@@ -268,14 +113,11 @@ header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 // --- LOAD .ENV CREDENTIALS ---
-$envFile = __DIR__ . '/.env';
-if (file_exists($envFile)) {
-    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-        if ($line[0] === '#' || strpos($line, '=') === false) continue;
-        [$key, $val] = explode('=', $line, 2);
-        $_ENV[trim($key)] = trim($val);
-    }
-}
+// agro_load_env() is the single copy of this loader (config/database.php). The
+// version that used to live here indexed $line[0] without trimming, so a line of
+// pure whitespace raised an "uninitialized string offset" notice.
+require_once __DIR__ . '/config/database.php';
+agro_load_env();
 
 $host     = $_ENV['DB_HOST']     ?? '';
 $username = $_ENV['DB_USER']     ?? '';
@@ -297,19 +139,21 @@ try {
 
     // Suppress warnings to handle errors manually
     if (!@$mysqli->real_connect($host, $username, $password, $database, $port)) {
-        throw new Exception("Connect Failed: " . mysqli_connect_error());
+        // mysqli_connect_error() names the database user and host on an
+        // access-denied ("Access denied for user 'x'@'y'"). Log it, do not serve it.
+        error_log('api.php database connection failed: ' . mysqli_connect_error());
+        throw new Exception('The service is temporarily unavailable. Please try again shortly.');
     }
 
     $mysqli->set_charset('utf8mb4');
 } catch (Exception $e) {
     ob_clean();
-    // Return 200 OK with error details so the App can display it
+    // Still HTTP 200 with success:false — the frontend reads the body, not the
+    // status. The message is deliberately generic; the detail is in the log.
     http_response_code(200);
     echo json_encode([
-        'success' => false,
-        'error' => $e->getMessage(),
-        'hint' => "Check database credentials in .env.",
-        'environment' => $_SERVER['HTTP_HOST'] ?? 'unknown',
+        'success'   => false,
+        'error'     => $e->getMessage(),
         'timestamp' => date('c')
     ]);
     exit;
@@ -452,29 +296,30 @@ try {
             break;
 
         case 'market_insights':
-            // Get market insights for a district
+            // district_id is OPTIONAL. Omit it and every district's insights come
+            // back in one response.
+            //
+            // The Market Insights page used to call this action once per district
+            // — 28 requests on page load and again on every refinement. On a 2G
+            // connection in rural Malawi that is the difference between a page
+            // that loads and one that does not. The page is information-first, so
+            // it needs the whole set anyway.
             $district_id = (int)($_GET['district_id'] ?? 0);
 
-            if (!$district_id) {
-                throw new Exception('District ID is required');
-            }
+            $query = "SELECT mi.id, mi.district_id, d.name AS district_name,
+                             mi.insight_en, mi.insight_ci
+                      FROM market_insights mi
+                      JOIN districts d ON mi.district_id = d.id";
 
-            $query = "
-                SELECT
-                    mi.id,
-                    mi.district_id,
-                    d.name as district_name,
-                    mi.insight_en,
-                    mi.insight_ci
-                FROM market_insights mi
-                JOIN districts d ON mi.district_id = d.id
-                WHERE mi.district_id = ?
-                ORDER BY mi.id DESC
-            ";
+            if ($district_id > 0) {
+                $query .= " WHERE mi.district_id = ?";
+            }
+            $query .= " ORDER BY d.name ASC, mi.id DESC";
 
             $stmt = $mysqli->prepare($query);
-            $stmt->bind_param('i', $district_id);
-            $stmt->execute();
+            if (!$stmt) throw new Exception('Market insights query could not be prepared.');
+            if ($district_id > 0) $stmt->bind_param('i', $district_id);
+            if (!$stmt->execute()) throw new Exception('Market insights query failed.');
             $insights = stmt_fetch_all($stmt);
 
             echo json_encode([
@@ -485,84 +330,79 @@ try {
             ]);
             break;
 
+        // ── DIRECTORY: sellers and buyers ───────────────────────────────
+        // Contact-first. district_id and crop are OPTIONAL refinements, not
+        // required entry steps: with neither, the whole national directory comes
+        // back and the page filters it in the browser.
+        //
+        // This replaced a separate directory-api.php that ran a near-identical
+        // query with its own database bootstrap. One query, one place.
+        //
+        // The contact-details join is a LEFT JOIN on purpose. An inner join
+        // silently hid every seller whose contact row was missing, which looked
+        // exactly like "there are no sellers in your district".
         case 'sellers':
-            $district_id = (int)($_GET['district_id'] ?? 0);
-            $crop        = trim($_GET['crop'] ?? '');
-
-            if (!$district_id) {
-                throw new Exception('District ID is required');
-            }
-
-            $query = "
-                SELECT s.id, s.name, s.district_id, d.name as district_name,
-                       scd.phone_number, scd.email, scd.address,
-                       GROUP_CONCAT(c.name ORDER BY c.name SEPARATOR ', ') as crops_display,
-                       ROUND(AVG(r.rating_value), 1) as rating
-                FROM sellers s
-                JOIN districts d ON s.district_id = d.id
-                JOIN seller_contact_details scd ON s.contact_id = scd.id
-                LEFT JOIN seller_crops sc ON s.id = sc.seller_id
-                LEFT JOIN crops c ON sc.crop_id = c.id
-                LEFT JOIN ratings r ON s.id = r.seller_id
-                WHERE s.district_id = ?";
-
-            if ($crop !== '') {
-                $query .= " AND s.id IN (
-                    SELECT sc2.seller_id FROM seller_crops sc2
-                    JOIN crops c2 ON sc2.crop_id = c2.id WHERE c2.name = ?)";
-            }
-
-            $query .= " GROUP BY s.id ORDER BY ROUND(AVG(r.rating_value), 1) DESC, s.name ASC";
-
-            $stmt = $mysqli->prepare($query);
-            if ($crop !== '') {
-                $stmt->bind_param('is', $district_id, $crop);
-            } else {
-                $stmt->bind_param('i', $district_id);
-            }
-            $stmt->execute();
-            $sellers = stmt_fetch_all($stmt);
-
-            echo json_encode(['success' => true, 'data' => $sellers, 'count' => count($sellers), 'timestamp' => date('c')]);
-            break;
-
         case 'buyers':
+            $isSellers   = $action === 'sellers';
             $district_id = (int)($_GET['district_id'] ?? 0);
             $crop        = trim($_GET['crop'] ?? '');
 
-            if (!$district_id) {
-                throw new Exception('District ID is required');
+            // The two branches spell their SQL out in full rather than
+            // interpolating table names. Slightly longer, impossible to misread.
+            if ($isSellers) {
+                $query = "SELECT s.id, s.name, s.district_id, d.name AS district_name,
+                                 scd.phone_number, scd.email, scd.address,
+                                 GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS crops_display
+                          FROM sellers s
+                          JOIN districts d ON s.district_id = d.id
+                          LEFT JOIN seller_contact_details scd ON s.contact_id = scd.id
+                          LEFT JOIN seller_crops sc ON s.id = sc.seller_id
+                          LEFT JOIN crops c ON sc.crop_id = c.id
+                          WHERE 1 = 1";
+            } else {
+                $query = "SELECT b.id, b.name, b.district_id, d.name AS district_name,
+                                 bcd.phone_number, bcd.email, bcd.address,
+                                 GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS crops_display
+                          FROM buyers b
+                          JOIN districts d ON b.district_id = d.id
+                          LEFT JOIN buyer_contact_details bcd ON b.contact_id = bcd.id
+                          LEFT JOIN buyer_crops bc ON b.id = bc.buyer_id
+                          LEFT JOIN crops c ON bc.crop_id = c.id
+                          WHERE 1 = 1";
             }
 
-            $query = "
-                SELECT b.id, b.name, b.district_id, d.name as district_name,
-                       bcd.phone_number, bcd.email, bcd.address,
-                       GROUP_CONCAT(c.name ORDER BY c.name SEPARATOR ', ') as crops_display
-                FROM buyers b
-                JOIN districts d ON b.district_id = d.id
-                JOIN buyer_contact_details bcd ON b.contact_id = bcd.id
-                LEFT JOIN buyer_crops bc ON b.id = bc.buyer_id
-                LEFT JOIN crops c ON bc.crop_id = c.id
-                WHERE b.district_id = ?";
-
+            $types  = '';
+            $params = [];
+            if ($district_id > 0) {
+                $query .= $isSellers ? " AND s.district_id = ?" : " AND b.district_id = ?";
+                $types .= 'i';
+                $params[] = $district_id;
+            }
             if ($crop !== '') {
-                $query .= " AND b.id IN (
-                    SELECT bc2.buyer_id FROM buyer_crops bc2
-                    JOIN crops c2 ON bc2.crop_id = c2.id WHERE c2.name = ?)";
+                $query .= $isSellers
+                    ? " AND s.id IN (SELECT sc2.seller_id FROM seller_crops sc2 JOIN crops c2 ON sc2.crop_id = c2.id WHERE c2.name = ?)"
+                    : " AND b.id IN (SELECT bc2.buyer_id FROM buyer_crops bc2 JOIN crops c2 ON bc2.crop_id = c2.id WHERE c2.name = ?)";
+                $types .= 's';
+                $params[] = $crop;
             }
-
-            $query .= " GROUP BY b.id ORDER BY b.name ASC";
+            // Every selected non-aggregate column is grouped, so this is correct
+            // under ONLY_FULL_GROUP_BY as well as without it.
+            $query .= $isSellers
+                ? " GROUP BY s.id, s.name, s.district_id, d.name, scd.phone_number, scd.email, scd.address ORDER BY s.name ASC"
+                : " GROUP BY b.id, b.name, b.district_id, d.name, bcd.phone_number, bcd.email, bcd.address ORDER BY b.name ASC";
 
             $stmt = $mysqli->prepare($query);
-            if ($crop !== '') {
-                $stmt->bind_param('is', $district_id, $crop);
-            } else {
-                $stmt->bind_param('i', $district_id);
-            }
-            $stmt->execute();
-            $buyers = stmt_fetch_all($stmt);
+            if (!$stmt) throw new Exception('Directory query could not be prepared.');
+            if ($types !== '') $stmt->bind_param($types, ...$params);
+            if (!$stmt->execute()) throw new Exception('Directory query failed.');
+            $rows = stmt_fetch_all($stmt);
 
-            echo json_encode(['success' => true, 'data' => $buyers, 'count' => count($buyers), 'timestamp' => date('c')]);
+            echo json_encode([
+                'success'   => true,
+                'data'      => $rows,
+                'count'     => count($rows),
+                'timestamp' => date('c'),
+            ]);
             break;
 
         case 'pest_control':
@@ -670,207 +510,14 @@ try {
             break;
 
         // ── ONBOARDING: Submit application ──────────────────────────
-        case 'submit_application':
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                throw new Exception('POST method required');
-            }
-
-            $body      = json_decode(file_get_contents('php://input'), true) ?? [];
-            $userType  = trim($body['user_type']  ?? '');
-            $fullName  = trim($body['full_name']   ?? '');
-            $phone     = trim($body['phone_number'] ?? '');
-            $email     = trim($body['email']        ?? '');
-            $nationalId = trim($body['national_id'] ?? '');
-            $districtId = (int)($body['district_id'] ?? 0) ?: null;
-            $village   = trim($body['village']      ?? '');
-            $crops     = trim($body['crops_of_interest'] ?? '');
-            $business  = trim($body['business_name'] ?? '');
-            $channel   = in_array($body['channel'] ?? '', ['web', 'ussd']) ? $body['channel'] : 'web';
-
-            if (!in_array($userType, ['farmer', 'seller', 'buyer'])) {
-                throw new Exception('Invalid user type');
-            }
-            if (strlen($fullName) < 2) {
-                throw new Exception('Full name is required');
-            }
-            if (!preg_match('/^\+?[0-9\s\-]{8,20}$/', $phone)) {
-                throw new Exception('Valid phone number is required');
-            }
-            if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                throw new Exception('Valid email is required');
-            }
-            if (!$districtId) {
-                throw new Exception('District is required');
-            }
-            if (!$village || strlen($village) < 2) {
-                throw new Exception('Village / town is required');
-            }
-            if (in_array($userType, ['seller', 'buyer']) && $business === '') {
-                throw new Exception('Business name is required for sellers and buyers');
-            }
-
-            $districtStmt = $mysqli->prepare("SELECT id FROM districts WHERE id = ?");
-            $districtStmt->bind_param('i', $districtId);
-            $districtStmt->execute();
-            if (!stmt_fetch_one($districtStmt)) {
-                throw new Exception('Selected district is invalid');
-            }
-
-            if ($userType === 'farmer') {
-                $business = null;
-            }
-
-            // Duplicate check — one application per person (phone, email, or national ID)
-            $dupSql = "SELECT application_ref, status, user_type
-                       FROM onboarding_applications
-                       WHERE phone_number = ?
-                          OR (? <> '' AND email <> '' AND email = ?)
-                          OR (? <> '' AND national_id <> '' AND national_id = ?)
-                       LIMIT 1";
-            $dupStmt = $mysqli->prepare($dupSql);
-            $dupStmt->bind_param('sssss', $phone, $email, $email, $nationalId, $nationalId);
-            $dupStmt->execute();
-            $dup = stmt_fetch_one($dupStmt);
-            if ($dup) {
-                $dupStatus = ucfirst($dup['status']);
-                $dupType   = ucfirst($dup['user_type']);
-                throw new Exception(
-                    "An application for this phone number, email or National ID already exists. " .
-                    "Reference: {$dup['application_ref']} ({$dupType} — {$dupStatus}). " .
-                    "Use the 'Already applied? Check status' button to track your application."
-                );
-            }
-
-            // Generate unique reference
-            $ref = 'AGR-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 5));
-
-            $stmt = $mysqli->prepare(
-                "INSERT INTO onboarding_applications
-                 (application_ref, user_type, full_name, phone_number, email, national_id,
-                  district_id, village, crops_of_interest, business_name, channel)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?)"
-            );
-            $stmt->bind_param(
-                'ssssssissss',
-                $ref,
-                $userType,
-                $fullName,
-                $phone,
-                $email,
-                $nationalId,
-                $districtId,
-                $village,
-                $crops,
-                $business,
-                $channel
-            );
-            $stmt->execute();
-
-            $adminEmail = trim($_ENV['Username'] ?? 'info@promanaged-it.com');
-            $adminCc    = 'johnpaulchirwa@gmail.com';
-            $roleLabel  = ucfirst($userType);
-
-            // Confirmation email to applicant
-            if ($email) {
-                $html = email_html(
-                    '<h2 style="margin:0 0 16px;font-size:20px;color:#1f2937;">Application Received!</h2>'
-                    . '<p style="margin:0 0 12px;font-size:15px;color:#374151;">Dear <strong>' . htmlspecialchars($fullName) . '</strong>,</p>'
-                    . '<p style="margin:0 0 20px;font-size:15px;color:#374151;">Thank you for registering with AgroBusiness Malawi. Your application has been received and is currently under review.</p>'
-                    . '<table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;margin-bottom:24px;">'
-                    . '<tbody>'
-                    . email_row('Reference', $ref)
-                    . email_row('Role', $roleLabel)
-                    . email_row('District', $village)
-                    . '</tbody></table>'
-                    . '<p style="margin:0 0 24px;font-size:15px;color:#374151;">We will review your application and notify you within <strong>2–3 business days</strong>. You can also check your status anytime using your reference number.</p>'
-                    . '<a href="https://agrobusinessmw.com/?ref=' . urlencode($ref) . '" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">Check Application Status</a>'
-                    . '<p style="margin:28px 0 0;font-size:13px;color:#6b7280;">If you have any questions, contact us at <a href="mailto:info@agrobusinessmw.com" style="color:#16a34a;">info@agrobusinessmw.com</a></p>'
-                );
-                send_smtp_email($email, "Application Received — {$ref}", $html);
-            }
-
-            // Admin notification
-            $districtStmt2 = $mysqli->prepare("SELECT name FROM districts WHERE id=?");
-            $districtStmt2->bind_param('i', $districtId);
-            $districtStmt2->execute();
-            $districtRow = stmt_fetch_one($districtStmt2);
-            $districtName = $districtRow['name'] ?? 'Unknown';
-
-            $adminHtml = email_html(
-                '<h2 style="margin:0 0 16px;font-size:20px;color:#1f2937;">New Application Submitted</h2>'
-                . '<p style="margin:0 0 20px;font-size:15px;color:#374151;">A new registration application has been submitted and is awaiting your review.</p>'
-                . '<table cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;margin-bottom:24px;">'
-                . '<tbody>'
-                . email_row('Reference', $ref)
-                . email_row('Full Name', $fullName)
-                . email_row('Role', $roleLabel)
-                . email_row('Phone', $phone)
-                . email_row('Email', $email ?: '—')
-                . email_row('District', $districtName)
-                . email_row('Village', $village)
-                . email_row('Business', $business ?: '—')
-                . email_row('Crops', $crops ?: '—')
-                . email_row('Channel', strtoupper($channel))
-                . email_row('Submitted', date('d M Y, H:i'))
-                . '</tbody></table>'
-                . '<a href="https://agrobusinessmw.com/?admin" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">Review in Admin Panel</a>'
-            );
-            send_smtp_email($adminEmail, "New Application: {$ref} — {$roleLabel}", $adminHtml, '', $adminCc);
-
-            echo json_encode([
-                'success'   => true,
-                'message'   => 'Application submitted successfully',
-                'ref'       => $ref,
-                'timestamp' => date('c')
-            ]);
-            break;
-
-        // ── ONBOARDING: Real-time duplicate check ───────────────────
-        // Lets the registration form warn the user BEFORE they finish, so nobody
-        // creates several accounts. phone/email/national_id are hard duplicates;
-        // full_name is a soft match (names are not unique) returned as a warning.
-        case 'check_duplicate':
-            $phone      = trim($_GET['phone'] ?? '');
-            $email      = trim($_GET['email'] ?? '');
-            $nationalId = trim($_GET['national_id'] ?? '');
-            $fullName   = trim($_GET['full_name'] ?? '');
-            $matches    = [];
-
-            $lookup = function ($sql, $val, $field, $hard) use ($mysqli, &$matches) {
-                $st = $mysqli->prepare($sql);
-                $st->bind_param('s', $val);
-                $st->execute();
-                $row = stmt_fetch_one($st);
-                if ($row) {
-                    $matches[] = [
-                        'field'  => $field,
-                        'hard'   => $hard,
-                        'ref'    => $row['application_ref'],
-                        'status' => $row['status'],
-                        'type'   => $row['user_type'],
-                    ];
-                }
-            };
-
-            if ($phone !== '') {
-                $lookup("SELECT application_ref, status, user_type FROM onboarding_applications WHERE phone_number = ? LIMIT 1", $phone, 'phone', true);
-            }
-            if ($email !== '') {
-                $lookup("SELECT application_ref, status, user_type FROM onboarding_applications WHERE email <> '' AND email = ? LIMIT 1", $email, 'email', true);
-            }
-            if ($nationalId !== '') {
-                $lookup("SELECT application_ref, status, user_type FROM onboarding_applications WHERE national_id <> '' AND national_id = ? LIMIT 1", $nationalId, 'national_id', true);
-            }
-            if ($fullName !== '') {
-                $lookup("SELECT application_ref, status, user_type FROM onboarding_applications WHERE full_name = ? LIMIT 1", $fullName, 'name', false);
-            }
-
-            echo json_encode([
-                'success' => true,
-                'exists'  => count($matches) > 0,
-                'matches' => $matches,
-            ]);
-            break;
+        // Registration (submit_application / check_duplicate) deliberately does
+        // NOT live here. register.php owns the whole registration flow: it
+        // validates, canonicalises phone and WhatsApp numbers via config/phone.php,
+        // checks duplicates, writes onboarding_applications and sends the emails.
+        // These two actions were a second, weaker path into the same table — they
+        // accepted un-normalised phone numbers and skipped WhatsApp entirely — so
+        // the same person could exist twice in different formats. Do not add them
+        // back; extend register.php instead.
 
         // ── ONBOARDING: Check application status ────────────────────
         case 'check_application':
@@ -1029,7 +676,13 @@ try {
             if ($channel === 'web') {
                 if (!$district_id)                                throw new Exception('District is required.');
                 if (mb_strlen($market) < 2)                       throw new Exception('Market / location is required.');
-                if (!preg_match('/^\+?[0-9\s\-]{8,20}$/', $phone)) throw new Exception('A valid phone number is required.');
+                // Canonicalise to the same E.164 the registration flow stores, so
+                // the member lookup below compares like with like.
+                $canonicalPhone = agro_normalize_phone($phone);
+                if ($canonicalPhone === null) {
+                    throw new Exception('Enter a Malawi number as 0888 123 456, or an international number with its country code.');
+                }
+                $phone = $canonicalPhone;
                 if (!filter_var($email, FILTER_VALIDATE_EMAIL))   throw new Exception('A valid email is required.');
             }
 
@@ -1101,7 +754,7 @@ try {
             break;
 
         default:
-            throw new Exception('Invalid action specified. Available actions: test, districts, crops, crop_prices, dual_crop_prices, markets, submit_price, market_insights, sellers, buyers, pest_control, farming_tips, basic_info, submit_application, check_application');
+            throw new Exception('Unknown action. Available actions: test, districts, crops, crop_prices, dual_crop_prices, markets, submit_price, market_insights, sellers, buyers, pest_control, farming_tips, basic_info, check_application.');
     }
 } catch (Throwable $e) {
     ob_clean();

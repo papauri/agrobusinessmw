@@ -12,23 +12,23 @@
     const copy = {
         en: {
             home: 'Home', title: 'Market Insights', eyebrow: 'AgroBusiness Malawi',
-            intro: 'Useful market information at a glance. Start with the latest updates, then narrow the view to a district when you need local detail.',
-            updates: 'market updates', districts: 'districts covered', latest: 'most recent update',
+            intro: 'Market information for every district, at a glance. Search it, or narrow to one district when you need local detail.',
+            updates: 'market updates', districts: 'districts covered',
             searchLabel: 'Search information', searchPlaceholder: 'Search markets, crops or information…',
             districtLabel: 'District', optional: 'optional', allMalawi: 'All Malawi',
             happening: 'What is happening?', update: 'update', updatesPlural: 'updates',
-            marketInfo: 'Market information', latestLabel: 'Latest', noInfo: 'No market information yet',
+            marketInfo: 'Market information', noInfo: 'No market information yet',
             noInfoText: 'There are no approved insights for this selection.', failed: 'Failed to load market insights',
             selectedDistrict: 'Selected district'
         },
         ci: {
             home: 'Kunyumba', title: 'Zidziwitso za Msika', eyebrow: 'AgroBusiness Malawi',
             intro: 'Dziwani zambiri zofunika za msika mwachidule. Yambani ndi zatsopano, kenako sankhani chigawo ngati mukufuna zambiri za komwe muli.',
-            updates: 'zidziwitso za msika', districts: 'zigawo zomwe zilipo', latest: 'chidziwitso chatsopano kwambiri',
+            updates: 'zidziwitso za msika', districts: 'zigawo zomwe zilipo',
             searchLabel: 'Sakani zidziwitso', searchPlaceholder: 'Sakani misika, mbewu kapena zidziwitso…',
             districtLabel: 'Chigawo', optional: 'sikofunikira', allMalawi: 'Malawi onse',
             happening: 'Zikuchitika chiyani?', update: 'chidziwitso', updatesPlural: 'zidziwitso',
-            marketInfo: 'Zidziwitso za msika', latestLabel: 'Chatsopano', noInfo: 'Palibe zidziwitso za msika pano',
+            marketInfo: 'Zidziwitso za msika', noInfo: 'Palibe zidziwitso za msika pano',
             noInfoText: 'Palibe zidziwitso zovomerezeka pa chisankhochi.', failed: 'Zalephera kutsegula zidziwitso za msika',
             selectedDistrict: 'Chigawo chosankhidwa'
         }
@@ -50,41 +50,20 @@
         else history.pushState(state, '', path);
     }
 
+    // One request for the whole country. api.php's market_insights action treats
+    // district_id as optional, so the page fetches everything once and refines in
+    // the browser. This used to be 28 parallel requests — one per district — on
+    // every load and every filter change.
     async function fetchInsights(app) {
-        const districts = await app.loadDistricts();
-        const results = await Promise.all((districts || []).map(async d => {
-            try {
-                const response = await app.apiCall(`api.php?action=market_insights&district_id=${encodeURIComponent(d.id)}`);
-                if (!response.success) return [];
-                return (response.data || []).map(item => ({
-                    ...item,
-                    district_id: Number(d.id),
-                    district_name: item.district_name || d.name
-                }));
-            } catch (_) {
-                return [];
-            }
+        const response = await app.apiCall('api.php?action=market_insights');
+        if (!response.success) throw new Error(response.error || 'Failed to load market insights');
+        return (response.data || []).map(item => ({
+            id: item.id,
+            district_id: Number(item.district_id),
+            district_name: item.district_name || '',
+            insight_en: item.insight_en || '',
+            insight_ci: item.insight_ci || ''
         }));
-        const seen = new Set();
-        return results.flat().filter(item => {
-            const key = `${item.district_id}|${item.id || item.insight_id || item.insight_en || item.insight_ci || ''}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-    }
-
-    function dateValue(item) { return item.updated_at || item.created_at || item.date || ''; }
-
-    function relativeDate(value, t) {
-        if (!value) return '';
-        const d = new Date(value);
-        if (Number.isNaN(d.getTime())) return '';
-        const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-        if (days <= 0) return t.latestLabel === 'Chatsopano' ? 'Lero' : 'Today';
-        if (days === 1) return t.latestLabel === 'Chatsopano' ? 'Dzulo' : 'Yesterday';
-        if (days < 7) return t.latestLabel === 'Chatsopano' ? `Masiku ${days} apitawo` : `${days} days ago`;
-        return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
     }
 
     function updateCount(count, t) { return `${count} ${count === 1 ? t.update : t.updatesPlural}`; }
@@ -98,7 +77,6 @@
             ? t.allMalawi
             : (districts.find(d => String(d.id) === String(selectedDistrict))?.name || t.selectedDistrict);
         const filtered = selectedDistrict === 'all' ? rows : rows.filter(r => String(r.district_id) === String(selectedDistrict));
-        const latest = [...filtered].sort((a, b) => new Date(dateValue(b)) - new Date(dateValue(a)));
         const districtCount = new Set(filtered.map(r => r.district_id)).size;
 
         setUrl(selectedDistrict, replace);
@@ -122,7 +100,6 @@
                 <section class="mi-overview" aria-label="${esc(t.title)} summary">
                     <article><span class="mi-stat-icon" aria-hidden="true">📊</span><div><strong>${filtered.length}</strong><span>${esc(t.updates)}</span></div></article>
                     <article><span class="mi-stat-icon" aria-hidden="true">📍</span><div><strong>${districtCount}</strong><span>${esc(t.districts)}</span></div></article>
-                    <article><span class="mi-stat-icon" aria-hidden="true">🕒</span><div><strong>${latest.length ? esc(relativeDate(dateValue(latest[0]), t) || t.latestLabel) : '—'}</strong><span>${esc(t.latest)}</span></div></article>
                 </section>
                 <section class="mi-toolbar" aria-label="${esc(t.title)} filters">
                     <div>
@@ -142,12 +119,16 @@
                     <span id="mi-count" aria-live="polite">${updateCount(filtered.length, t)}</span>
                 </div>
                 <div class="mi-grid" id="mi-grid">
-                    ${latest.map(item => {
+                    ${filtered.map(item => {
                         const insight = item[app.currentLang === 'ci' ? 'insight_ci' : 'insight_en'] || item.insight_en || item.insight_ci || '';
-                        const searchable = `${item.district_name || ''} ${item.title || ''} ${item.topic || ''} ${item.insight_en || ''} ${item.insight_ci || ''}`.toLowerCase();
+                        const searchable = `${item.district_name || ''} ${item.insight_en || ''} ${item.insight_ci || ''}`.toLowerCase();
+                        // The heading is the district. market_insights holds only
+                        // district_id, insight_en and insight_ci — there is no
+                        // title, topic or date column, so rendering one would put
+                        // the same placeholder on every card.
                         return `<article class="mi-card" data-district="${esc(item.district_id)}" data-search="${esc(searchable)}">
-                            <div class="mi-card-top"><span class="mi-pin" aria-hidden="true">📍</span><span class="mi-district">${esc(item.district_name || 'Malawi')}</span><span class="mi-latest">${esc(relativeDate(dateValue(item), t) || t.latestLabel)}</span></div>
-                            <h4>${esc(item.title || item.topic || t.marketInfo)}</h4>
+                            <div class="mi-card-top"><span class="mi-pin" aria-hidden="true">📍</span><span class="mi-district">${esc(item.district_name || 'Malawi')}</span></div>
+                            <h4>${esc(item.district_name || 'Malawi')}</h4>
                             <p>${esc(insight || (app.currentLang === 'ci' ? 'Zidziwitso za msika zilipo pa derali.' : 'Market information is available for this area.'))}</p>
                             <div class="mi-card-foot"><span>${esc(t.marketInfo)}</span><span class="material-symbols-rounded" aria-hidden="true">trending_up</span></div>
                         </article>`;
@@ -192,20 +173,24 @@
     }
 
     function install() {
+        // This controller owns market-insights.php and nothing else. It used to
+        // wrap app.openService so the dashboard tile rendered here too, but
+        // openService now navigates to this page directly, so there is one route
+        // in and no wrapper whose behaviour depends on script load order.
+        if (window.AGRO_PAGE !== 'market-insights') return;
         if (!window.app || window.app._marketInsightsPageInstalled) return;
+
         const app = window.app;
         app._marketInsightsPageInstalled = true;
-        const originalOpenService = app.openService.bind(app);
-        app.openService = function (service) {
-            if (service === 'market-insights') { open(app, 'all', true); return; }
-            return originalOpenService(service);
-        };
+
+        // Back/forward within the page (district refinements) replay through here.
         const originalReplay = typeof app._replayState === 'function' ? app._replayState.bind(app) : null;
         app._replayState = function (state) {
             if (state && state.view === 'market_insights_page') { open(app, state.districtId || 'all', false); return; }
             if (originalReplay) return originalReplay(state);
         };
-        if (window.AGRO_PAGE === 'market-insights') open(app, getDistrictId(), false);
+
+        open(app, getDistrictId(), false);
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);

@@ -1,12 +1,15 @@
 <?php
 /**
  * Shared <head> for every page. Set these before including:
- *   $pageTitle (string)  — <title> + og:title
- *   $pageDesc  (string)  — meta description
+ *   $pageTitle   (string)   — <title> + og:title
+ *   $pageDesc    (string)   — meta description
+ *   $pageStyles  (string[]) — extra stylesheet hrefs for this page only, emitted
+ *                             in <head> so page-specific CSS never flashes unstyled.
  * Falls back to sensible defaults if unset.
  */
-$pageTitle = $pageTitle ?? 'AgroBusiness Malawi';
-$pageDesc  = $pageDesc  ?? 'Agricultural platform for Malawian farmers — live weather, crop prices, market insights across 28 districts.';
+$pageTitle  = $pageTitle  ?? 'AgroBusiness Malawi';
+$pageDesc   = $pageDesc   ?? 'Agricultural platform for Malawian farmers — live weather, crop prices, market insights across 28 districts.';
+$pageStyles = $pageStyles ?? [];
 ?>
 <!DOCTYPE html>
 <html lang="en" data-user-lang="en">
@@ -63,6 +66,9 @@ $pageDesc  = $pageDesc  ?? 'Agricultural platform for Malawian farmers — live 
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/first-loader.css">
     <link rel="stylesheet" href="assets/css/footer.css">
+    <?php foreach ($pageStyles as $pageStyle): ?>
+    <link rel="stylesheet" href="<?= htmlspecialchars($pageStyle) ?>">
+    <?php endforeach; ?>
 
     <!-- Inline Critical CSS for Loading Screen -->
     <style>

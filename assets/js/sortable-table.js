@@ -9,7 +9,7 @@
         var css = document.createElement('style');
         css.id = 'sortable-table-styles';
         css.textContent =
-            'table.sortable th{cursor:pointer;user-select:none;white-space:nowrap;position:relative}' +
+            'table.sortable th{cursor:pointer;user-select:none;white-space:nowrap;position:relative;height:44px}' +
             'table.sortable th[data-no-sort]{cursor:default}' +
             'table.sortable th:not([data-no-sort])::after{content:"\\2195";opacity:.35;margin-left:.4em;font-size:.85em;font-weight:400}' +
             'table.sortable th[aria-sort="ascending"]::after{content:"\\2191";opacity:1}' +

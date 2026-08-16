@@ -944,14 +944,21 @@ class AgroBusinessRevolution {
         const c = parseInt(localStorage.getItem('agro_selected_crop'), 10);
         if (c) this.selectedCrop = c;
 
-        const setTitle = (txt) => { const t = document.getElementById('content-title'); if (t) t.textContent = txt; };
-        if (page === 'register') {
-            // Page-first: show the intro page; the modal only opens when the user
-            // clicks "Start Registration". Do NOT auto-open the modal on load.
+        // Pages with their own controller script boot themselves. app.js must not
+        // also dispatch them, or two renderers race for #content-area:
+        //   market-insights.php → assets/js/market-insights-page.js
+        //   sellers.php/buyers.php → assets/js/directory-navigation.js (they set
+        //     $service = null, so they never reach here, but the guard is cheap)
+        //   register.php → assets/js/register.js (does not load app.js at all)
+        const selfBootingPages = ['market-insights', 'sellers', 'buyers', 'register'];
+        if (page && selfBootingPages.includes(page)) {
             this._isPageMode = true;
             this.showScreen('content');
-            setTitle(this.currentLang === 'ci' ? 'Lembetsani' : 'Register');
-        } else if (page === 'status') {
+            return;
+        }
+
+        const setTitle = (txt) => { const t = document.getElementById('content-title'); if (t) t.textContent = txt; };
+        if (page === 'status') {
             this._isPageMode = true;
             this.showScreen('content');
             setTitle(this.currentLang === 'ci' ? 'Onani Mkhalidwe' : 'Check Status');
@@ -976,10 +983,7 @@ class AgroBusinessRevolution {
         switch (state.view) {
             case 'crop_prices': this.loadCropPrices(state.specificCrop || null); break;
             case 'weather': this.loadWeather(state.districtId); break;
-            case 'market_insights': this.loadMarketInsights(state.districtId); break;
             case 'district_selection': this.showDistrictSelection(this._pendingDistrictCallback || null); break;
-            case 'sellers': this.loadSellers(state.districtId, state.specificCrop || null); break;
-            case 'buyers': this.loadBuyers(state.districtId); break;
             case 'pest_control':
                 { const _t = document.getElementById('content-title'); if (_t) _t.textContent = this.texts[this.currentLang].pest_control; }
                 this.showLoading(); this.loadPestControl(state.cropId, state.districtId); break;
@@ -1182,10 +1186,29 @@ class AgroBusinessRevolution {
     }
 
     openService(service) {
-        // Register never leaves the dashboard — just open the modal
-        if (service === 'register') {
-            this.openRegistrationModal();
-            return;
+        // Four services are standalone pages with their own controllers, so the
+        // dashboard hands off to them by navigating rather than rendering here.
+        //
+        // These used to be monkey-patched onto openService by three separate
+        // hook scripts loaded from partials/scripts.php, which meant the real
+        // destination of a dashboard tile depended on script load order. Routing
+        // them here keeps one navigation system with one obvious answer.
+        //   register        → register.php        (the only registration flow)
+        //   sellers/buyers  → sellers.php/buyers.php (contact-first directory)
+        //   market-insights → market-insights.php (information-first page)
+        const standalonePages = {
+            'register': 'register.php',
+            'sellers': 'sellers.php',
+            'buyers': 'buyers.php',
+            'market-insights': 'market-insights.php'
+        };
+        if (standalonePages[service]) {
+            // Guard against a page navigating to itself, which would reload in a loop.
+            const here = location.pathname.split('/').pop() || 'index.php';
+            if (here !== standalonePages[service]) {
+                window.location.href = standalonePages[service];
+                return;
+            }
         }
 
         this.showScreen('content');
@@ -1207,15 +1230,6 @@ class AgroBusinessRevolution {
                 } else {
                     this.showDistrictSelection(() => this.loadWeather(this.selectedDistrict));
                 }
-                break;
-            case 'market-insights':
-                this.showDistrictSelection(() => this.loadMarketInsights(this.selectedDistrict));
-                break;
-            case 'sellers':
-                this.showDistrictSelection(() => this.loadSellers(this.selectedDistrict));
-                break;
-            case 'buyers':
-                this.showDistrictSelection(() => this.loadBuyers(this.selectedDistrict));
                 break;
             case 'pest-control':
                 this.showCropSelection(() => {
@@ -1605,10 +1619,10 @@ class AgroBusinessRevolution {
 
             const card = (d, i) => `
                 <button type="button" class="overview-item${this.selectedDistrict === d.id ? ' is-selected' : ''}"
-                    style="animation-delay:${i * 0.02}s" data-id="${d.id}" data-name="${(d.name || '').toLowerCase()}">
-                    <span class="overview-badge mono ${regionClass[d.region] || 'r-central'}">${(d.name || '?').charAt(0).toUpperCase()}</span>
-                    <span class="overview-title">${d.name}</span>
-                    <span class="overview-chip">${d.region}</span>
+                    style="animation-delay:${i * 0.02}s" data-id="${Number(d.id)}" data-name="${escapeHtml((d.name || '').toLowerCase())}">
+                    <span class="overview-badge mono ${regionClass[d.region] || 'r-central'}">${escapeHtml((d.name || '?').charAt(0).toUpperCase())}</span>
+                    <span class="overview-title">${escapeHtml(d.name)}</span>
+                    <span class="overview-chip">${escapeHtml(d.region)}</span>
                 </button>`;
 
             const allCard = opts.includeAll ? `
@@ -1622,7 +1636,7 @@ class AgroBusinessRevolution {
                 <div class="picker-recent">
                     <span class="picker-recent-label">Recent</span>
                     <div class="picker-recent-row">
-                        ${recent.map(d => `<button type="button" class="picker-recent-chip" data-id="${d.id}">${d.name}</button>`).join('')}
+                        ${recent.map(d => `<button type="button" class="picker-recent-chip" data-id="${Number(d.id)}">${escapeHtml(d.name)}</button>`).join('')}
                     </div>
                 </div>` : '';
 
@@ -1752,41 +1766,41 @@ class AgroBusinessRevolution {
         if (area) {
             area.innerHTML = `
                 <div style="text-align: center; padding: 3rem;">
-                    <h2 style="margin-bottom: 2rem; color: var(--primary);">📍 ${district.name}</h2>
-                    <p style="margin-bottom: 3rem; color: var(--text-secondary);">What would you like to know about ${district.name}?</p>
+                    <h2 style="margin-bottom: 2rem; color: var(--primary);">📍 ${escapeHtml(district.name)}</h2>
+                    <p style="margin-bottom: 3rem; color: var(--text-secondary);">What would you like to know about ${escapeHtml(district.name)}?</p>
 
                     <div class="services-grid" style="max-width: 800px; margin: 0 auto;">
                         <div class="service-card" onclick="app.showLoading();app.loadWeather(${districtId})" style="cursor: pointer;">
                             <div class="service-icon-3d">🌤️</div>
                             <div class="service-content-modern">
                                 <h3>Weather Forecast</h3>
-                                <p>7-day weather predictions for ${district.name}</p>
+                                <p>7-day weather predictions for ${escapeHtml(district.name)}</p>
                             </div>
                         </div>
 
-                        <div class="service-card" onclick="app.showLoading();app.loadMarketInsights(${districtId})" style="cursor: pointer;">
+                        <a class="service-card" href="market-insights.php?district_id=${encodeURIComponent(districtId)}">
                             <div class="service-icon-3d">📊</div>
                             <div class="service-content-modern">
                                 <h3>Market Insights</h3>
                                 <p>Local market information and trends</p>
                             </div>
-                        </div>
+                        </a>
 
-                        <div class="service-card" onclick="app.showLoading();app.loadSellers(${districtId})" style="cursor: pointer;">
+                        <a class="service-card" href="sellers.php?district_id=${encodeURIComponent(districtId)}">
                             <div class="service-icon-3d">👨‍🌾</div>
                             <div class="service-content-modern">
                                 <h3>Find Sellers</h3>
-                                <p>Connect with suppliers in ${district.name}</p>
+                                <p>Connect with suppliers in ${escapeHtml(district.name)}</p>
                             </div>
-                        </div>
+                        </a>
 
-                        <div class="service-card" onclick="app.showLoading();app.loadBuyers(${districtId})" style="cursor: pointer;">
+                        <a class="service-card" href="buyers.php?district_id=${encodeURIComponent(districtId)}">
                             <div class="service-icon-3d">🏢</div>
                             <div class="service-content-modern">
                                 <h3>Find Buyers</h3>
-                                <p>Markets and buyers in ${district.name}</p>
+                                <p>Markets and buyers in ${escapeHtml(district.name)}</p>
                             </div>
-                        </div>
+                        </a>
                     </div>
                 </div>
             `;
@@ -1808,34 +1822,34 @@ class AgroBusinessRevolution {
             if (area) {
                 area.innerHTML = `
                     <div style="text-align: center; padding: 3rem;">
-                        <h2 style="margin-bottom: 2rem; color: var(--primary);">${this.getCropIcon(crop.name)} ${crop.name}</h2>
-                        <p style="margin-bottom: 3rem; color: var(--text-secondary);">${t.crop_actions_heading} ${crop.name}?</p>
+                        <h2 style="margin-bottom: 2rem; color: var(--primary);">${this.getCropIcon(crop.name)} ${escapeHtml(crop.name)}</h2>
+                        <p style="margin-bottom: 3rem; color: var(--text-secondary);">${t.crop_actions_heading} ${escapeHtml(crop.name)}?</p>
 
                         <div class="services-grid" style="max-width: 800px; margin: 0 auto;">
                             <button class="service-card crop-action-btn" data-action="prices"
-                                data-crop-id="${cropId}" data-crop-name="${crop.name.replace(/"/g, '&quot;')}" type="button">
+                                data-crop-id="${Number(cropId)}" data-crop-name="${escapeHtml(crop.name)}" type="button">
                                 <div class="service-icon-3d">💰</div>
                                 <div class="service-content-modern">
                                     <h3>${t.current_prices}</h3>
-                                    <p>${t.market_prices_for} ${crop.name}</p>
+                                    <p>${t.market_prices_for} ${escapeHtml(crop.name)}</p>
                                 </div>
                             </button>
 
                             <button class="service-card crop-action-btn" data-action="tips"
-                                data-crop-id="${cropId}" data-crop-name="${crop.name.replace(/"/g, '&quot;')}" type="button">
+                                data-crop-id="${Number(cropId)}" data-crop-name="${escapeHtml(crop.name)}" type="button">
                                 <div class="service-icon-3d">🌾</div>
                                 <div class="service-content-modern">
                                     <h3>${t.farming_tips}</h3>
-                                    <p>${t.best_practices_for} ${crop.name}</p>
+                                    <p>${t.best_practices_for} ${escapeHtml(crop.name)}</p>
                                 </div>
                             </button>
 
                             <button class="service-card crop-action-btn" data-action="pest"
-                                data-crop-id="${cropId}" data-crop-name="${crop.name.replace(/"/g, '&quot;')}" type="button">
+                                data-crop-id="${Number(cropId)}" data-crop-name="${escapeHtml(crop.name)}" type="button">
                                 <div class="service-icon-3d">🐛</div>
                                 <div class="service-content-modern">
                                     <h3>${t.pest_control}</h3>
-                                    <p>${t.protect_crops} ${crop.name}</p>
+                                    <p>${t.protect_crops} ${escapeHtml(crop.name)}</p>
                                 </div>
                             </button>
                         </div>
@@ -2326,7 +2340,11 @@ class AgroBusinessRevolution {
             const fmt = n => n ? 'MK ' + parseFloat(n).toLocaleString() : '—';
             const ago = dt => {
                 if (!dt) return '—';
-                const d = Math.floor((Date.now() - new Date(dt)) / 86400000);
+                // MySQL returns "2026-08-16 13:49:50". iOS Safari returns Invalid
+                // Date for that form, so give it the ISO separator first.
+                const when = new Date(String(dt).replace(' ', 'T'));
+                if (Number.isNaN(when.getTime())) return '—';
+                const d = Math.floor((Date.now() - when.getTime()) / 86400000);
                 return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d}d ago`;
             };
 
@@ -2706,8 +2724,16 @@ class AgroBusinessRevolution {
                     try {
                         const res = await this.apiCall(`api.php?action=markets&district_id=${id}`);
                         if (res.success) {
-                            prMarketList.innerHTML = res.data
-                                .map(m => `<option value="${(m.name || '').replace(/"/g, '&quot;')}"></option>`).join('');
+                            // Market names are created by anonymous price reports
+                            // (api.php submit_price does find-or-create), so this is
+                            // public user input. Built as DOM nodes rather than
+                            // markup with a hand-rolled quote replacement.
+                            prMarketList.textContent = '';
+                            (res.data || []).forEach(m => {
+                                const option = document.createElement('option');
+                                option.value = m.name || '';
+                                prMarketList.appendChild(option);
+                            });
                         }
                     } catch (_) { /* datalist is optional; free text still works */ }
                 });
@@ -2726,75 +2752,6 @@ class AgroBusinessRevolution {
         });
     }
 
-    showCropDetails(cropName) {
-        const area = document.getElementById('content-area');
-        if (!area) return;
-
-        const safeCrop = escapeHtml(cropName);
-        area.innerHTML = `
-                <div style="text-align: center; padding: 3rem;">
-                    <h2 style="margin-bottom: 2rem; color: var(--primary);">${this.getCropIcon(cropName)} ${safeCrop} Details</h2>
-                    <p style="margin-bottom: 3rem; color: var(--text-secondary);">Learn more about ${safeCrop}</p>
-
-                    <div class="services-grid" style="max-width: 800px; margin: 0 auto;">
-                        <div class="service-card" data-crop-action="prices" style="cursor: pointer;">
-                            <div class="service-icon-3d">💰</div>
-                            <div class="service-content-modern">
-                                <h3>Price History</h3>
-                                <p>Historical pricing for ${safeCrop}</p>
-                            </div>
-                        </div>
-
-                        <div class="service-card" data-crop-action="tips" style="cursor: pointer;">
-                            <div class="service-icon-3d">🌾</div>
-                            <div class="service-content-modern">
-                                <h3>Growing Guide</h3>
-                                <p>Best practices for ${safeCrop}</p>
-                            </div>
-                        </div>
-
-                        <div class="service-card" data-crop-action="markets" style="cursor: pointer;">
-                            <div class="service-icon-3d">🏪</div>
-                            <div class="service-content-modern">
-                                <h3>Find Markets</h3>
-                                <p>Where to sell ${safeCrop}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-        // Bind the cards after render rather than interpolating the crop name into an
-        // inline handler attribute. The browser HTML-decodes an attribute before the JS
-        // parser sees its contents, so escaping cannot make a value safe inside a JS
-        // string literal in markup. The closures below carry the raw value instead, so
-        // nothing crop-derived reaches the markup at all.
-        const cardHandlers = {
-            prices: () => this.loadCropPrices(cropName),
-            tips: () => this.getCropFarmingTips(cropName),
-            markets: () => this.getCropMarkets(cropName)
-        };
-        area.querySelectorAll('[data-crop-action]').forEach(card => {
-            const handler = cardHandlers[card.dataset.cropAction];
-            if (handler) card.addEventListener('click', handler);
-        });
-    }
-
-    getCropFarmingTips(cropName) {
-        this.loadCrops().then(crops => {
-            const crop = crops.find(c => c.name.toLowerCase() === cropName.toLowerCase());
-            if (crop) {
-                this.loadFarmingTips(crop.id);
-            }
-        });
-    }
-
-    getCropMarkets(cropName) {
-        // Show districts where this crop is commonly sold
-        this.showDistrictSelection(() => {
-            this.loadSellers(this.selectedDistrict, cropName);
-        });
-    }
 
     async loadWeather(districtId) {
         try {
@@ -2910,284 +2867,7 @@ class AgroBusinessRevolution {
         document.getElementById('content-area').innerHTML = html;
     }
 
-    async loadMarketInsights(districtId) {
-        try {
-            this.pushNavState('market_insights', { districtId });
-            const response = await this.apiCall('api.php?action=market_insights&district_id=' + districtId);
 
-            if (!response.success) {
-                this.showError(response.error || 'Failed to load market insights');
-                return;
-            }
-
-            const insights = response.data || [];
-
-            if (insights.length === 0) {
-                this.showNoData();
-                return;
-            }
-
-            const html = `
-                <h2 style="margin-bottom: 2rem; color: var(--primary);">📊 ${this.texts[this.currentLang].market_insights}</h2>
-                <div class="insights-grid" style="display: grid; gap: 1.5rem;">
-                    ${insights.map((insight, index) => `
-                        <div class="insight-card" style="background: var(--white); border: 1px solid var(--gray-200); border-radius: var(--radius-xl); padding: 2rem; position: relative; overflow: hidden; animation: serviceReveal 0.4s ease ${index * 0.1}s both;">
-                            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: var(--gradient-primary);"></div>
-                            <div class="card-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
-                                <h3 style="display: flex; align-items: center; gap: 0.75rem; color: var(--text-primary);">
-                                    <span style="font-size: 2rem;">📍</span>
-                                    ${escapeHtml(insight.district_name)} Market Update
-                                </h3>
-                                <span class="update-badge" style="background: var(--primary-glow); color: var(--primary); padding: 0.25rem 0.75rem; border-radius: var(--radius-md); font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">Latest</span>
-                            </div>
-                            <p style="color: var(--text-secondary); line-height: 1.7; font-size: 1rem;">${escapeHtml(insight[`insight_${this.currentLang}`] || insight.insight_en)}</p>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-
-            document.getElementById('content-area').innerHTML = html;
-
-        } catch (error) {
-            console.error('❌ Error loading market insights:', error);
-            this.showError('Failed to load market insights');
-        }
-    }
-
-    renderStars(rating) {
-        const r = parseFloat(rating) || 0;
-        const full = Math.floor(r);
-        const half = r - full >= 0.5 ? 1 : 0;
-        const empty = 5 - full - half;
-        const stars = '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
-        return `<span class="trade-stars" title="${r}/5">${stars}</span><span class="trade-rating-num">${r}/5</span>`;
-    }
-
-    contactSearchHtml(type, count, districtName, crops = [], districtId = null) {
-        const t = this.texts[this.currentLang];
-        const isSeller = type === 'seller';
-        const title = isSeller ? t.find_sellers : t.find_buyers;
-        const ph = isSeller ? t.search_sellers : t.search_buyers;
-
-        const toggle = districtId !== null ? `
-            <div class="trade-type-toggle">
-                <button class="trade-toggle-btn ${isSeller ? 'active' : ''}" onclick="app.loadSellers(${districtId})">${t.find_sellers}</button>
-                <button class="trade-toggle-btn ${!isSeller ? 'active' : ''}" onclick="app.loadBuyers(${districtId})">${t.find_buyers}</button>
-            </div>` : '';
-
-        const chipHtml = crops.length ? `
-            <div class="trade-chips" role="group" aria-label="Filter by crop">
-                <button class="trade-chip active" data-crop-filter="">All</button>
-                ${crops.map(c => `<button class="trade-chip" data-crop-filter="${escapeHtml(c.toLowerCase())}">${escapeHtml(c)}</button>`).join('')}
-            </div>` : '';
-
-        return `
-            <div class="trade-hero trade-hero-${type}">
-                <div class="trade-hero-inner">
-                    <span class="trade-kicker">${escapeHtml(districtName)}</span>
-                    <h2>${title}</h2>
-                    <p>${count} ${isSeller ? 'seller' : 'buyer'}${count === 1 ? '' : 's'} found — tap to call directly</p>
-                </div>
-                ${toggle}
-            </div>
-            <div class="trade-controls">
-                <label class="trade-filter">
-                    <span class="material-symbols-rounded">search</span>
-                    <input type="search" data-contact-filter placeholder="${ph}" aria-label="${ph}">
-                </label>
-                ${chipHtml}
-            </div>
-            <p class="trade-filter-count" data-contact-count>${count} showing</p>`;
-    }
-
-    bindContactFilter() {
-        const input = document.querySelector('[data-contact-filter]');
-        const countEl = document.querySelector('[data-contact-count]');
-        const cards = Array.from(document.querySelectorAll('[data-contact-card]'));
-        const chips = document.querySelectorAll('[data-crop-filter]');
-        if (!input || !countEl || !cards.length) return;
-
-        let activeCrop = '';
-        let searchTerm = '';
-
-        const applyFilter = () => {
-            searchTerm = input.value.toLowerCase().trim();
-            let visible = 0;
-            cards.forEach(card => {
-                const show = (!searchTerm || card.dataset.search.includes(searchTerm))
-                    && (!activeCrop || (card.dataset.crops || '').includes(activeCrop));
-                card.hidden = !show;
-                if (show) visible++;
-            });
-            countEl.textContent = (searchTerm || activeCrop)
-                ? `${visible} match${visible === 1 ? '' : 'es'}`
-                : `${cards.length} showing`;
-
-            // Update chip visual states
-            updateChipStates();
-        };
-
-        const updateChipStates = () => {
-            chips.forEach(chip => {
-                const cropFilter = chip.dataset.cropFilter || '';
-                if (cropFilter === activeCrop) {
-                    chip.classList.add('active');
-                } else {
-                    chip.classList.remove('active');
-                }
-            });
-        };
-
-        const clearAllFilters = () => {
-            input.value = '';
-            activeCrop = '';
-            chips.forEach(c => c.classList.remove('active'));
-            const allChip = document.querySelector('[data-crop-filter=""]');
-            if (allChip) allChip.classList.add('active');
-            applyFilter();
-        };
-
-        chips.forEach(chip => {
-            chip.addEventListener('click', () => {
-                chips.forEach(c => c.classList.remove('active'));
-                chip.classList.add('active');
-                activeCrop = chip.dataset.cropFilter;
-                applyFilter();
-            });
-
-            chip.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    chip.click();
-                }
-            });
-        });
-
-        input.addEventListener('input', applyFilter);
-
-        // Enhance filter focus states
-        input.addEventListener('focus', () => {
-            const filterControl = input.closest('.trade-filter');
-            if (filterControl) filterControl.classList.add('focused');
-        });
-
-        input.addEventListener('blur', () => {
-            const filterControl = input.closest('.trade-filter');
-            if (filterControl) filterControl.classList.remove('focused');
-        });
-    }
-
-    async loadSellers(districtId, specificCrop = null) {
-        try {
-            this.pushNavState('sellers', { districtId, specificCrop });
-            let endpoint = `api.php?action=sellers&district_id=${districtId}`;
-            if (specificCrop) endpoint += `&crop=${encodeURIComponent(specificCrop)}`;
-            const response = await this.apiCall(endpoint);
-            if (!response.success) { this.showError(response.error || 'Failed to load sellers'); return; }
-            const sellers = response.data || [];
-            if (!sellers.length) { this.showNoData(); return; }
-
-            const districtName = sellers[0]?.district_name || 'Selected district';
-            const cropSet = new Set();
-            sellers.forEach(s => (s.crops_display || '').split(', ').forEach(c => c.trim() && cropSet.add(c.trim())));
-            const crops = [...cropSet].sort();
-
-            const html = `
-                ${this.contactSearchHtml('seller', sellers.length, districtName, crops, districtId)}
-                <div class="trade-list">
-                    ${sellers.map(seller => {
-                const cropStr = seller.crops_display || '';
-                const cropTags = cropStr
-                    ? cropStr.split(', ').map(c => `<span class="trade-crop-tag">${escapeHtml(c.trim())}</span>`).join('')
-                    : '<span class="trade-crop-tag muted">No crops listed</span>';
-                const ratingNum = parseFloat(seller.rating);
-                const ratingHtml = ratingNum ? this.renderStars(ratingNum) : '<span class="trade-new-badge">New</span>';
-                const searchStr = `${seller.name} ${seller.district_name} ${seller.phone_number || ''} ${seller.email || ''} ${seller.address || ''} ${cropStr}`.toLowerCase();
-                return `
-                            <article class="trade-card seller-card" data-contact-card data-search="${escapeHtml(searchStr)}" data-crops="${escapeHtml(cropStr.toLowerCase())}">
-                                <div class="trade-card-accent"></div>
-                                <div>
-                                    <div class="trade-card-body">
-                                        <div class="trade-card-header">
-                                            <div>
-                                                <h3 class="trade-card-name">${escapeHtml(seller.name)}</h3>
-                                                <p class="trade-location">${escapeHtml(seller.district_name)}${seller.address ? ` · ${escapeHtml(seller.address)}` : ''}</p>
-                                            </div>
-                                            <div class="trade-rating">${ratingHtml}</div>
-                                        </div>
-                                        <div class="trade-crop-tags">${cropTags}</div>
-                                    </div>
-                                    <div class="trade-actions">
-                                        <a href="tel:${escapeHtml(seller.phone_number)}" class="trade-call">
-                                            <span class="material-symbols-rounded">call</span>${escapeHtml(seller.phone_number)}
-                                        </a>
-                                        ${seller.email ? `<a href="mailto:${escapeHtml(seller.email)}" class="trade-email"><span class="material-symbols-rounded">mail</span>Email</a>` : ''}
-                                    </div>
-                                </div>
-                            </article>`;
-            }).join('')}
-                </div>`;
-            document.getElementById('content-area').innerHTML = html;
-            this.bindContactFilter();
-        } catch (error) {
-            console.error('Error loading sellers:', error);
-            this.showError('Failed to load sellers');
-        }
-    }
-
-    async loadBuyers(districtId) {
-        try {
-            this.pushNavState('buyers', { districtId });
-            const response = await this.apiCall(`api.php?action=buyers&district_id=${districtId}`);
-            if (!response.success) { this.showError(response.error || 'Failed to load buyers'); return; }
-            const buyers = response.data || [];
-            if (!buyers.length) { this.showNoData(); return; }
-
-            const districtName = buyers[0]?.district_name || 'Selected district';
-            const cropSet = new Set();
-            buyers.forEach(b => (b.crops_display || '').split(', ').forEach(c => c.trim() && cropSet.add(c.trim())));
-            const crops = [...cropSet].sort();
-
-            const html = `
-                ${this.contactSearchHtml('buyer', buyers.length, districtName, crops, districtId)}
-                <div class="trade-list">
-                    ${buyers.map(buyer => {
-                const cropStr = buyer.crops_display || '';
-                const cropTags = cropStr
-                    ? cropStr.split(', ').map(c => `<span class="trade-crop-tag">${escapeHtml(c.trim())}</span>`).join('')
-                    : '<span class="trade-crop-tag muted">No crops listed</span>';
-                const searchStr = `${buyer.name} ${buyer.district_name} ${buyer.phone_number || ''} ${buyer.email || ''} ${buyer.address || ''} ${cropStr}`.toLowerCase();
-                return `
-                            <article class="trade-card buyer-card" data-contact-card data-search="${escapeHtml(searchStr)}" data-crops="${escapeHtml(cropStr.toLowerCase())}">
-                                <div class="trade-card-accent"></div>
-                                <div>
-                                    <div class="trade-card-body">
-                                        <div class="trade-card-header">
-                                            <div>
-                                                <h3 class="trade-card-name">${escapeHtml(buyer.name)}</h3>
-                                                <p class="trade-location">${escapeHtml(buyer.district_name)}${buyer.address ? ` · ${escapeHtml(buyer.address)}` : ''}</p>
-                                            </div>
-                                            <div class="trade-rating"><span class="trade-new-badge">Buying</span></div>
-                                        </div>
-                                        <div class="trade-crop-tags">${cropTags}</div>
-                                    </div>
-                                    <div class="trade-actions">
-                                        <a href="tel:${escapeHtml(buyer.phone_number)}" class="trade-call">
-                                            <span class="material-symbols-rounded">call</span>${escapeHtml(buyer.phone_number)}
-                                        </a>
-                                        ${buyer.email ? `<a href="mailto:${escapeHtml(buyer.email)}" class="trade-email"><span class="material-symbols-rounded">mail</span>Email</a>` : ''}
-                                    </div>
-                                </div>
-                            </article>`;
-            }).join('')}
-                </div>`;
-            document.getElementById('content-area').innerHTML = html;
-            this.bindContactFilter();
-        } catch (error) {
-            console.error('Error loading buyers:', error);
-            this.showError('Failed to load buyers');
-        }
-    }
 
     async loadPestControl(cropId, districtId) {
         try {
@@ -3445,324 +3125,12 @@ document.head.appendChild(weatherStyle);
 // attributes) can reach it via window.app.
 window.app = new AgroBusinessRevolution();
 
-// ─── REGISTRATION / KYC MODULE ────────────────────────────────────────────────
+// ─── APPLICATION STATUS LOOKUP ────────────────────────────────────────────────
+// Registration itself is NOT here. It lives entirely in register.php +
+// assets/js/register.js. This file only owns the status-check modal, which the
+// nav and status.php open. Do not reintroduce a registration flow in app.js.
 
-AgroBusinessRevolution.prototype.openRegistrationModal = function () {
-    const modal = document.getElementById('register-modal');
-    if (!modal) return;
-    this._regState = { step: 1, userType: null, selectedCrops: [] };
-    this._regNameWarned = false;
-    document.querySelectorAll('.reg-option').forEach(b => b.classList.remove('selected'));
-    const bizField = document.getElementById('reg-business-field');
-    if (bizField) bizField.style.display = 'none';
-
-    ['reg-full-name', 'reg-phone', 'reg-email', 'reg-national-id', 'reg-village', 'reg-business-name'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    });
-
-    const district = document.getElementById('reg-district');
-    if (district) district.value = '';
-    document.querySelectorAll('#reg-crops-grid input[type="checkbox"]').forEach(cb => cb.checked = false);
-
-    const successEl = document.getElementById('reg-step-success');
-    if (successEl) successEl.style.display = 'none';
-    document.querySelectorAll('.reg-step-content').forEach(el => el.style.display = 'none');
-    const step1 = document.getElementById('reg-step-1');
-    if (step1) step1.style.display = '';
-
-    this._regGotoStep(1);
-    this._regLoadDistricts();
-    this._regLoadCrops();
-    this.openModal(modal);
-};
-
-AgroBusinessRevolution.prototype._regGotoStep = function (step) {
-    const state = this._regState;
-    state.step = step;
-
-    // Hide all step contents
-    document.querySelectorAll('.reg-step-content').forEach(el => el.style.display = 'none');
-    const target = document.getElementById(`reg-step-${step}`);
-    if (target) target.style.display = '';
-
-    // Update step indicators
-    document.querySelectorAll('.reg-steps .reg-step').forEach(el => {
-        const s = parseInt(el.dataset.step);
-        el.classList.toggle('reg-step-active', s === step);
-        el.classList.toggle('reg-step-done', s < step);
-    });
-
-    // Build review on step 4
-    if (step === 4) this._regBuildReview();
-};
-
-AgroBusinessRevolution.prototype._regLoadDistricts = function () {
-    const sel = document.getElementById('reg-district');
-    if (!sel) return;
-    // Clear any previously loaded options except the placeholder so re-opens don't duplicate
-    while (sel.options.length > 1) sel.remove(1);
-    fetch(`api.php?action=districts`)
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) return;
-            data.data.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d.id;
-                opt.textContent = d.name;
-                sel.appendChild(opt);
-            });
-        })
-        .catch(() => {
-            if (window.app) window.app.showNotification('Failed to load districts. Please try again.', 'error');
-        });
-};
-
-AgroBusinessRevolution.prototype._regLoadCrops = function () {
-    const grid = document.getElementById('reg-crops-grid');
-    if (!grid || grid.children.length > 0) return;
-    fetch(`api.php?action=crops`)
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) return;
-            grid.innerHTML = '';
-            data.data.forEach(c => {
-                const label = document.createElement('label');
-                label.className = 'reg-crop-checkbox';
-                label.innerHTML = `<input type="checkbox" value="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}"> ${escapeHtml(c.name)}`;
-                grid.appendChild(label);
-            });
-        })
-        .catch(() => {
-            if (window.app) window.app.showNotification('Failed to load crops. Please try again.', 'error');
-        });
-};
-
-AgroBusinessRevolution.prototype._regBuildReview = function () {
-    const s = this._regState;
-    const districtName = document.getElementById('reg-district').selectedOptions[0]?.text || '—';
-    const selectedCrops = [...document.querySelectorAll('#reg-crops-grid input:checked')].map(el => el.dataset.name).join(', ') || '—';
-    const container = document.getElementById('reg-review-content');
-    if (!container) return;
-    container.innerHTML = `
-        <strong>Type:</strong> ${s.userType ? s.userType.charAt(0).toUpperCase() + s.userType.slice(1) : '—'}<br>
-        <strong>Name:</strong> ${document.getElementById('reg-full-name').value || '—'}<br>
-        <strong>Phone:</strong> ${document.getElementById('reg-phone').value || '—'}<br>
-        <strong>Email:</strong> ${document.getElementById('reg-email').value || 'Not provided'}<br>
-        <strong>National ID:</strong> ${document.getElementById('reg-national-id').value || 'Not provided'}<br>
-        <strong>District:</strong> ${districtName}<br>
-        <strong>Village / Town:</strong> ${document.getElementById('reg-village').value || '—'}<br>
-        <strong>Crops:</strong> ${selectedCrops}<br>
-        ${s.userType !== 'farmer' ? `<strong>Business:</strong> ${document.getElementById('reg-business-name').value || '—'}<br>` : ''}
-    `;
-};
-
-// Wire up registration modal events once DOM is ready
 document.addEventListener('DOMContentLoaded', function () {
-    // Close button
-    const closeBtn = document.getElementById('register-modal-close');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            const modal = document.getElementById('register-modal');
-            if (modal && window.app) { window.app.closeModal(modal); }
-        });
-    }
-
-    // User type selection (step 1)
-    document.querySelectorAll('.reg-option').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.reg-option').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            if (window.app) {
-                window.app._regState.userType = btn.dataset.type;
-                // Show business name field for seller/buyer
-                const bizField = document.getElementById('reg-business-field');
-                if (bizField) bizField.style.display = btn.dataset.type !== 'farmer' ? '' : 'none';
-                setTimeout(() => window.app._regGotoStep(2), 200);
-            }
-        });
-    });
-
-    // Back buttons
-    document.querySelectorAll('.reg-back-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (window.app) window.app._regGotoStep(parseInt(btn.dataset.goto));
-        });
-    });
-
-    // Step 2 → 3
-    const step2Next = document.getElementById('reg-step2-next');
-    if (step2Next) {
-        step2Next.addEventListener('click', () => {
-            document.querySelectorAll('#reg-step-2 .field-error').forEach(el => el.remove());
-            document.querySelectorAll('#reg-step-2 .is-invalid').forEach(el => el.classList.remove('is-invalid'));
-
-            const setErr = (id, msg) => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                el.classList.add('is-invalid');
-                const span = document.createElement('span');
-                span.className = 'field-error';
-                span.textContent = msg;
-                el.parentNode.appendChild(span);
-            };
-
-            const name       = document.getElementById('reg-full-name').value.trim();
-            const phone      = document.getElementById('reg-phone').value.trim();
-            const email      = document.getElementById('reg-email').value.trim();
-            const nationalId = document.getElementById('reg-national-id').value.trim();
-            const district   = document.getElementById('reg-district').value;
-            const village    = document.getElementById('reg-village').value.trim();
-
-            let valid = true;
-            if (!name || name.length < 2) { setErr('reg-full-name', 'Full name is required (at least 2 characters).'); valid = false; }
-
-            const digitCount = (phone.match(/\d/g) || []).length;
-            if (!phone || digitCount < 7) { setErr('reg-phone', 'Enter a valid phone number (e.g. 0999 123 456).'); valid = false; }
-
-            if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { setErr('reg-email', 'Enter a valid email address or leave blank.'); valid = false; }
-
-            if (!village || village.length < 2) { setErr('reg-village', 'Village or town is required.'); valid = false; }
-            if (!district) { setErr('reg-district', 'Please select your district.'); valid = false; }
-
-            if (!valid) return;
-
-            // Real-time DB duplicate check — stop several accounts before the form is finished.
-            const errIdFor = (f) => f === 'national_id' ? 'reg-national-id' : (f === 'name' ? 'reg-full-name' : 'reg-' + f);
-            const labelFor = { phone: 'phone number', email: 'email', national_id: 'National ID' };
-            const params = new URLSearchParams({ phone, email, national_id: nationalId, full_name: name });
-            step2Next.disabled = true;
-            const origLabel = step2Next.textContent;
-            step2Next.textContent = 'Checking…';
-            fetch('api.php?action=check_duplicate&' + params.toString())
-                .then(r => r.json())
-                .then(res => {
-                    step2Next.disabled = false;
-                    step2Next.textContent = origLabel;
-                    const matches = (res && res.matches) || [];
-                    const hard = matches.filter(m => m.hard);
-                    if (hard.length) {
-                        hard.forEach(m => setErr(errIdFor(m.field),
-                            `This ${labelFor[m.field] || m.field} is already registered (Ref ${m.ref} · ${m.status}). Use “Check status” instead of registering again.`));
-                        return;
-                    }
-                    const soft = matches.filter(m => !m.hard);
-                    if (soft.length && !window.app._regNameWarned) {
-                        window.app._regNameWarned = true;
-                        setErr('reg-full-name', 'Someone with this name has already applied. If that is you, use “Check status”. If not, press Next again to continue.');
-                        return;
-                    }
-                    if (window.app) window.app._regGotoStep(3);
-                })
-                .catch(() => {
-                    // Network issue — don't hard-block; submit-time check still guards duplicates.
-                    step2Next.disabled = false;
-                    step2Next.textContent = origLabel;
-                    if (window.app) window.app._regGotoStep(3);
-                });
-        });
-    }
-
-    // Clear field errors when user types
-    ['reg-full-name', 'reg-phone', 'reg-email', 'reg-village'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('input', () => {
-            el.classList.remove('is-invalid');
-            const err = el.parentNode.querySelector('.field-error');
-            if (err) err.remove();
-        });
-    });
-    const districtSel = document.getElementById('reg-district');
-    if (districtSel) districtSel.addEventListener('change', () => {
-        districtSel.classList.remove('is-invalid');
-        const err = districtSel.parentNode.querySelector('.field-error');
-        if (err) err.remove();
-    });
-
-    // Step 3 → 4
-    const step3Next = document.getElementById('reg-step3-next');
-    if (step3Next) {
-        step3Next.addEventListener('click', () => {
-            const selectedCrops = [...document.querySelectorAll('#reg-crops-grid input:checked')].map(el => el.dataset.name);
-            const business = document.getElementById('reg-business-name').value.trim();
-            const userType = window.app?._regState?.userType;
-
-            if (!selectedCrops.length) { window.app && window.app.showNotification('Please select at least one crop.', 'error'); return; }
-            if (userType && userType !== 'farmer' && !business) { window.app && window.app.showNotification('Please enter your business or organisation name.', 'error'); return; }
-            if (window.app) window.app._regGotoStep(4);
-        });
-    }
-
-    // Submit
-    const submitBtn = document.getElementById('reg-submit-btn');
-    if (submitBtn) {
-        submitBtn.addEventListener('click', async () => {
-            if (!window.app) return;
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Submitting…';
-
-            const state = window.app._regState;
-            const selectedCrops = [...document.querySelectorAll('#reg-crops-grid input:checked')].map(el => el.dataset.name).join(', ');
-            const districtId = document.getElementById('reg-district').value;
-
-            const payload = {
-                user_type: state.userType,
-                full_name: document.getElementById('reg-full-name').value.trim(),
-                phone_number: document.getElementById('reg-phone').value.trim(),
-                email: document.getElementById('reg-email').value.trim(),
-                national_id: document.getElementById('reg-national-id').value.trim(),
-                district_id: districtId ? parseInt(districtId) : null,
-                village: document.getElementById('reg-village').value.trim(),
-                crops_of_interest: selectedCrops,
-                business_name: document.getElementById('reg-business-name').value.trim(),
-                channel: 'web'
-            };
-
-            try {
-                const res = await fetch(`api.php?action=submit_application`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    document.querySelectorAll('.reg-step-content').forEach(el => el.style.display = 'none');
-                    const successEl = document.getElementById('reg-step-success');
-                    if (successEl) successEl.style.display = '';
-                    const refEl = document.getElementById('reg-ref-number');
-                    if (refEl) refEl.textContent = data.ref;
-                    // Mark all steps done
-                    document.querySelectorAll('.reg-steps .reg-step').forEach(el => {
-                        el.classList.remove('reg-step-active');
-                        el.classList.add('reg-step-done');
-                    });
-                } else {
-                    if (window.app) window.app.showNotification(data.error || 'Submission failed. Please try again.', 'error');
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Submit Application ✓';
-                }
-            } catch (err) {
-                if (window.app) window.app.showNotification('Network error. Please check your connection and try again.', 'error');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit Application ✓';
-            }
-        });
-    }
-
-    // Check status button (opens status modal)
-    const checkStatusBtn = document.getElementById('reg-check-status-btn');
-    if (checkStatusBtn) {
-        checkStatusBtn.addEventListener('click', () => {
-            const regModal = document.getElementById('register-modal');
-            if (regModal && window.app) { window.app.closeModal(regModal); }
-            setTimeout(() => {
-                const statusModal = document.getElementById('status-modal');
-                if (statusModal && window.app) { window.app.openModal(statusModal); }
-            }, 260);
-        });
-    }
-
     // Status modal close
     const statusCloseBtn = document.getElementById('status-modal-close');
     if (statusCloseBtn) {
@@ -3774,48 +3142,111 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Status check
     const statusCheckBtn = document.getElementById('status-check-btn');
-    if (statusCheckBtn) {
-        statusCheckBtn.addEventListener('click', async () => {
-            const ref = document.getElementById('status-ref-input').value.trim().toUpperCase();
-            if (!ref) { if (window.app) window.app.showNotification('Please enter your reference number.', 'error'); return; }
-            statusCheckBtn.textContent = 'Checking…';
-            statusCheckBtn.disabled = true;
-            const result = document.getElementById('status-result');
+    const statusRefInput = document.getElementById('status-ref-input');
+    const statusResult = document.getElementById('status-result');
 
-            try {
-                const res = await fetch(`api.php?action=check_application&ref=${encodeURIComponent(ref)}`);
-                const data = await res.json();
-                if (data.success && data.data) {
-                    const d = data.data;
-                    const statusClass = d.status;
-                    result.style.display = '';
-                    result.innerHTML = `
-                        <div style="background:#242424;border-radius:10px;padding:1rem;font-size:.9rem;line-height:1.8;">
-                            <strong>${escapeHtml(d.full_name)}</strong> &nbsp; <span class="status-badge ${escapeHtml(statusClass)}">${escapeHtml(String(d.status).toUpperCase())}</span><br>
-                            <strong>Type:</strong> ${escapeHtml(d.user_type)}<br>
-                            <strong>District:</strong> ${escapeHtml(d.district_name || '—')}<br>
-                            <strong>Applied:</strong> ${escapeHtml(new Date(d.created_at).toLocaleDateString())}<br>
-                            ${d.status === 'denied' && d.denial_reason ? `<strong>Reason:</strong> ${escapeHtml(d.denial_reason)}<br>` : ''}
-                            ${d.status === 'approved' ? '<br>✅ You are now a verified member of AgroBusiness Malawi!' : ''}
-                            ${d.status === 'pending' ? '<br>⏳ Your application is under review. We will notify you soon.' : ''}
-                        </div>
-                    `;
-                } else {
-                    result.style.display = '';
-                    result.innerHTML = `<p style="color:#ef4444;">Application not found. Please check your reference number.</p>`;
-                }
-            } catch (err) {
-                result.style.display = '';
-                result.innerHTML = `<p style="color:#ef4444;">Network error. Please try again.</p>`;
+    // Renders the status panel from DOM nodes rather than a template literal.
+    // full_name and denial_reason are applicant and admin free text on a page
+    // that needs no login, so nothing here goes near innerHTML.
+    function renderStatus(d) {
+        statusResult.textContent = '';
+        statusResult.className = 'status-result status-result-' + (d.status || 'pending');
+
+        const head = document.createElement('div');
+        head.className = 'status-result-head';
+        const name = document.createElement('strong');
+        name.textContent = d.full_name || '—';
+        const badge = document.createElement('span');
+        badge.className = 'status-badge ' + (d.status || 'pending');
+        badge.textContent = String(d.status || '').toUpperCase();
+        head.append(name, badge);
+        statusResult.appendChild(head);
+
+        const list = document.createElement('dl');
+        list.className = 'status-result-list';
+        const rows = [
+            ['Reference', d.application_ref || '—'],
+            ['Type', d.user_type || '—'],
+            ['District', d.district_name || '—'],
+            ['Applied', formatApplied(d.created_at)]
+        ];
+        if (d.status === 'denied' && d.denial_reason) rows.push(['Reason', d.denial_reason]);
+        rows.forEach(([label, detail]) => {
+            const row = document.createElement('div');
+            const dt = document.createElement('dt');
+            dt.textContent = label;
+            const dd = document.createElement('dd');
+            dd.textContent = detail;
+            row.append(dt, dd);
+            list.appendChild(row);
+        });
+        statusResult.appendChild(list);
+
+        const note = { approved: '\u2705 You are a verified member of AgroBusiness Malawi.',
+                       pending: '\u23f3 Your application is under review. We will notify you soon.',
+                       denied: '\u2716 This application was not approved.' }[d.status];
+        if (note) {
+            const p = document.createElement('p');
+            p.className = 'status-result-note';
+            p.textContent = note;
+            statusResult.appendChild(p);
+        }
+        statusResult.hidden = false;
+    }
+
+    // MySQL hands back "2026-08-16 13:49:50". new Date() parses that on Chrome
+    // and Firefox but returns Invalid Date on iOS Safari, which put "Invalid
+    // Date" in front of every iPhone user. Convert to ISO before parsing.
+    function formatApplied(value) {
+        if (!value) return '—';
+        const parsed = new Date(String(value).replace(' ', 'T'));
+        return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleDateString();
+    }
+
+    function showStatusMessage(message) {
+        statusResult.textContent = '';
+        statusResult.className = 'status-result status-result-error';
+        const p = document.createElement('p');
+        p.textContent = message;
+        statusResult.appendChild(p);
+        statusResult.hidden = false;
+    }
+
+    if (statusCheckBtn && statusRefInput && statusResult) {
+        statusCheckBtn.addEventListener('click', async () => {
+            const ref = statusRefInput.value.trim().toUpperCase();
+            if (!ref) {
+                showStatusMessage('Enter the reference number you were given when you registered.');
+                statusRefInput.focus();
+                return;
             }
 
-            statusCheckBtn.textContent = 'Check Status';
-            statusCheckBtn.disabled = false;
+            const originalLabel = statusCheckBtn.textContent;
+            statusCheckBtn.textContent = 'Checking…';
+            statusCheckBtn.disabled = true;
+
+            try {
+                const res = await fetch('api.php?action=check_application&ref=' + encodeURIComponent(ref), {
+                    headers: { Accept: 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success && data.data) renderStatus(data.data);
+                else showStatusMessage('No application found with that reference. Check the number and try again.');
+            } catch (err) {
+                showStatusMessage('We could not reach the server. Check your connection and try again.');
+            } finally {
+                statusCheckBtn.textContent = originalLabel;
+                statusCheckBtn.disabled = false;
+            }
+        });
+
+        // Enter submits, which is how anyone actually uses a single-field form.
+        statusRefInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') { event.preventDefault(); statusCheckBtn.click(); }
         });
     }
 
-    // Backdrop-click for register-modal and status-modal is already handled by
-    // bindModalEvents() which covers all .modal elements. No duplicate listener needed.
+    // Backdrop clicks are handled for every .modal by bindModalEvents().
 });
 
-// ─── END REGISTRATION MODULE ──────────────────────────────────────────────────
+// ─── END APPLICATION STATUS LOOKUP ────────────────────────────────────────────
