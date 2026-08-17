@@ -19,3 +19,28 @@
    target — a miss on the select is a miss on the only filter this page has. */
 .directory-search input,.directory-district select{min-height:44px}
 .directory-district{display:flex;flex-direction:column;justify-content:center}
+
+/* ── Crop filter ───────────────────────────────────────────────────────────
+   A third control joined search and district, so the row is now
+   search | district | crop. The search box keeps the flexible column; the two
+   selects are fixed so they do not shrink below a readable crop name. */
+.directory-controls{grid-template-columns:1fr 200px 200px}
+@media(max-width:900px){.directory-controls{grid-template-columns:1fr 1fr;gap:.7rem}.directory-search{grid-column:1 / -1}}
+@media(max-width:720px){.directory-controls{grid-template-columns:1fr}}
+
+/* ── Crops on a card ───────────────────────────────────────────────────────
+   The card answers "what do they deal in" before you tap it, so the strip is
+   always rendered — with a muted "no crops listed" when there are none, rather
+   than an absence the reader has to interpret. */
+.directory-crops{align-items:center}
+.directory-crops-label{font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-secondary,#6b7280);margin-right:.1rem}
+.directory-crops em.directory-crop-more{background:rgba(139,115,85,.1);color:var(--accent,#8b7355)}
+.directory-crops em.directory-crop-none{background:transparent;padding-left:0;color:var(--text-secondary,#9ca3af);font-size:.7rem}
+
+/* Chichewa runs longer than English. At 320px "Palibe mbewu yolembedwa" and
+   "Mbewu zonse" both need to wrap inside the card rather than push it wide. */
+@media(max-width:400px){
+  .directory-crops{gap:.25rem}
+  .directory-crops-label{flex:0 0 100%;margin-right:0}
+  .directory-card{gap:.7rem;padding:.85rem}
+}

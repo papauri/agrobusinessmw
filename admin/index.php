@@ -204,6 +204,82 @@ $db->query("CREATE TABLE IF NOT EXISTS price_overrides (
  * can surface the reason to the admin. Returns the directory table the applicant
  * was added to, or '' when nothing was promoted.
  */
+/**
+ * Link an approved seller/buyer to the crops they named at registration.
+ *
+ * WHY THIS EXISTS
+ *   The directory advertises what each contact deals in, and the crop filter on
+ *   sellers.php / buyers.php is built from those links. Nothing wrote them.
+ *   register.php captured crops_of_interest, the admin panel promoted the
+ *   applicant, and seller_crops / buyer_crops stayed empty — so every newly
+ *   approved contact appeared with no crops and matched no crop filter.
+ *
+ * WHY MATCHING BY NAME IS SAFE HERE
+ *   register.php does not store what the browser sent. It validates the crop
+ *   ids against the crops table and stores the names it read back from that
+ *   table, ", "-joined (register.php:398-435). So every token here is either an
+ *   exact crops.name or a legacy/hand-edited value, and a token that matches
+ *   nothing is skipped rather than invented.
+ *
+ * FAILURE POLICY
+ *   A crop link that cannot be written aborts the approval. This runs inside
+ *   the caller's transaction, so a half-linked contact is never committed.
+ *   INSERT IGNORE absorbs only the duplicate-key case, which the composite
+ *   primary key (seller_id, crop_id) makes harmless.
+ */
+function admin_link_applicant_crops(mysqli $db, string $userType, int $ownerId, ?string $cropsOfInterest): int
+{
+    $names = array_filter(array_map('trim', explode(',', (string)$cropsOfInterest)), static fn($n) => $n !== '');
+    if (!$names) {
+        return 0;
+    }
+
+    // Both statements are full literals — the table name is never interpolated.
+    $link = $userType === 'seller'
+        ? $db->prepare("INSERT IGNORE INTO seller_crops (seller_id, crop_id) VALUES (?,?)")
+        : $db->prepare("INSERT IGNORE INTO buyer_crops (buyer_id, crop_id) VALUES (?,?)");
+    if (!$link) {
+        throw new RuntimeException('the crop link insert could not be prepared');
+    }
+
+    $lookup = $db->prepare("SELECT id FROM crops WHERE name = ? LIMIT 1");
+    if (!$lookup) {
+        $link->close();
+        throw new RuntimeException('the crop lookup could not be prepared');
+    }
+
+    $linked = 0;
+    try {
+        foreach (array_unique($names) as $name) {
+            $lookup->bind_param('s', $name);
+            if (!$lookup->execute()) {
+                throw new RuntimeException('the crop lookup failed');
+            }
+            $cropId = 0;
+            $lookup->bind_result($cropId);
+            $found = $lookup->fetch();
+            $lookup->free_result();
+            // A name with no row in `crops` is skipped, not guessed at. Writing
+            // it anyway would mean inventing a crop id, and crop_id carries an
+            // FK to crops(id) that would reject it mid-transaction.
+            if (!$found || (int)$cropId <= 0) {
+                continue;
+            }
+            $cropId = (int)$cropId;
+            $link->bind_param('ii', $ownerId, $cropId);
+            if (!$link->execute()) {
+                throw new RuntimeException('a crop link could not be saved');
+            }
+            $linked++;
+        }
+    } finally {
+        $lookup->close();
+        $link->close();
+    }
+
+    return $linked;
+}
+
 function admin_promote_applicant(mysqli $db, array $app): string
 {
     $userType = (string)($app['user_type'] ?? '');
@@ -284,6 +360,11 @@ function admin_promote_applicant(mysqli $db, array $app): string
         if (!$sOk) {
             throw new RuntimeException('the seller directory row could not be saved');
         }
+        $sellerId = (int)$db->insert_id;
+        if ($sellerId <= 0) {
+            throw new RuntimeException('the seller directory row returned no id');
+        }
+        admin_link_applicant_crops($db, 'seller', $sellerId, $app['crops_of_interest'] ?? null);
         return 'sellers';
     }
 
@@ -312,6 +393,11 @@ function admin_promote_applicant(mysqli $db, array $app): string
     if (!$bOk) {
         throw new RuntimeException('the buyer directory row could not be saved');
     }
+    $buyerId = (int)$db->insert_id;
+    if ($buyerId <= 0) {
+        throw new RuntimeException('the buyer directory row returned no id');
+    }
+    admin_link_applicant_crops($db, 'buyer', $buyerId, $app['crops_of_interest'] ?? null);
     return 'buyers';
 }
 
@@ -347,7 +433,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
             // promotion needs. FOR UPDATE locks the row so two concurrent approvals
             // of the same id serialise here instead of both seeing 'pending'.
             $s2 = $db->prepare(
-                "SELECT full_name, email, application_ref, user_type, phone_number, whatsapp_number, district_id, village, status
+                "SELECT full_name, email, application_ref, user_type, phone_number, whatsapp_number, district_id, village, crops_of_interest, status
                  FROM onboarding_applications WHERE id=? FOR UPDATE"
             );
             if (!$s2) {
@@ -362,18 +448,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
             // one-for-one, in order — 9 columns, 9 variables. If you add a column
             // to the SELECT you MUST add its variable here in the same position;
             // bind_result is positional and silently shifts every later value.
-            $s2->bind_result($fullName, $email, $appRef, $userType, $phoneNumber, $whatsappNumber, $districtId, $village, $currentStatus);
+            // 10 columns, 10 variables.
+            $s2->bind_result($fullName, $email, $appRef, $userType, $phoneNumber, $whatsappNumber, $districtId, $village, $cropsOfInterest, $currentStatus);
             $app = $s2->fetch()
                 ? [
-                    'full_name'       => $fullName,
-                    'email'           => $email,
-                    'application_ref' => $appRef,
-                    'user_type'       => $userType,
-                    'phone_number'    => $phoneNumber,
-                    'whatsapp_number' => $whatsappNumber,
-                    'district_id'     => $districtId,
-                    'village'         => $village,
-                    'status'          => $currentStatus,
+                    'full_name'         => $fullName,
+                    'email'             => $email,
+                    'application_ref'   => $appRef,
+                    'user_type'         => $userType,
+                    'phone_number'      => $phoneNumber,
+                    'whatsapp_number'   => $whatsappNumber,
+                    'district_id'       => $districtId,
+                    'village'           => $village,
+                    'crops_of_interest' => $cropsOfInterest,
+                    'status'            => $currentStatus,
                   ]
                 : null;
             $s2->close();

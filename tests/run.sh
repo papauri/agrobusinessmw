@@ -108,6 +108,19 @@ count=$(printf '%s' "$offenders" | grep -c . )
 git ls-files --error-unmatch .env >/dev/null 2>&1 && tracked=1 || tracked=0
 [ "$tracked" -eq 0 ]; report $? ".env is not tracked by git"
 
+# The farmer roster is the one public listing built straight out of
+# onboarding_applications, and that table holds phone_number, whatsapp_number,
+# email and national_id in the columns either side of the ones it reads. Nobody
+# who registered as a farmer agreed to have their number published (privacy.php
+# §3 says so explicitly), so one careless `SELECT oa.*` is a real leak. These two
+# gates read the shipped query text rather than trusting the comment above it.
+farmers_block=$(sed -n "/case 'farmers':/,/^            break;/p" api.php)
+count=$(printf '%s\n' "$farmers_block" | grep -cE 'phone_number|whatsapp_number|national_id|oa\.email|oa\.\*')
+[ "$count" -eq 0 ]; report $? "the farmers query selects no contact column (found $count)"
+
+printf '%s\n' "$farmers_block" | grep -q "oa.status = 'approved'"
+report $? "the farmers query lists only approved registrations"
+
 # The standalone controllers must not hardcode a user-facing string outside
 # their copy tables — that is how register.js and the directory ended up
 # English-only in the first place.

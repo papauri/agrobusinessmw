@@ -198,6 +198,21 @@ include __DIR__ . '/partials/head.php';
                             <p data-text="find_buyers_desc">Find markets</p>
                         </a>
 
+                        <a class="service-card" href="farmers.php" aria-label="Registered farmers">
+                            <div class="service-icon">
+                                <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <circle cx="17" cy="15" r="6" fill="currentColor" />
+                                    <path d="M6 34c0-6.1 4.9-11 11-11s11 4.9 11 11" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none" />
+                                    <circle cx="32" cy="18" r="5" fill="currentColor" opacity=".55" />
+                                    <path d="M24 34c0-5 3.6-9 8-9s8 4 8 9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none" opacity=".55" />
+                                    <path d="M8 42h32" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+                                    <path d="M14 42c0-3 1.6-5 3-7M34 42c0-3-1.6-5-3-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".4" />
+                                </svg>
+                            </div>
+                            <h3 data-text="find_farmers">Farmers</h3>
+                            <p data-text="find_farmers_desc">See who has registered</p>
+                        </a>
+
                         <a class="service-card" href="pest-control.php" aria-label="Pest control info">
                             <div class="service-icon">
                                 <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

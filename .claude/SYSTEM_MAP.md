@@ -20,6 +20,7 @@ This replaces the 2026-07-10 map, which described an app that no longer exists
 | Market insights | `market-insights.php` | `market-insights-page.js` | `market_insights` | `market_insights`, `districts` | both |
 | Find sellers | `sellers.php` | `directory-navigation.js` | `sellers` | `sellers`, `seller_contact_details`, `seller_crops`, `crops`, `districts` | both |
 | Find buyers | `buyers.php` | `directory-navigation.js` | `buyers` | `buyers`, `buyer_contact_details`, `buyer_crops`, `crops`, `districts` | both |
+| Registered farmers | `farmers.php` | `directory-navigation.js` | `farmers` | `onboarding_applications`, `districts` | web only |
 | Weather | `weather.php` | `app.js` | none — Open-Meteo direct | — | both |
 | Pest control | `pest-control.php` | `app.js` | `pest_control` | `pest_control_tips`, `crops`, `districts` | both |
 | Farming tips | `farming-tips.php` | `app.js` | `farming_tips` | `farming_best_practices`, `crops` | both |
@@ -51,6 +52,7 @@ the shape recorded. All are public; there is no token-gated action left in
 | 6 | `market_insights` | GET | **`district_id?`** | `{success, data, count, timestamp}` | 24 rows all-districts; 1 row filtered |
 | 7 | `sellers` | GET | **`district_id?`**, `crop?` | `{success, data, count, timestamp}` | 20 national, 1 filtered |
 | 8 | `buyers` | GET | **`district_id?`**, `crop?` | `{success, data, count, timestamp}` | 15 national, 1 filtered |
+| 8b | `farmers` | GET | **`district_id?`**, `crop?` | `{success, data, count, timestamp}` — **no contact columns** | approved farmers only; pending/denied excluded |
 | 9 | `pest_control` | GET | `crop_id`, `district_id` | `{success, data, count, timestamp}` | rows returned |
 | 10 | `farming_tips` | GET | `crop_id` | `{success, data, count, timestamp}` | rows returned |
 | 11 | `basic_info` | GET | — | `{success, data, count, timestamp}` | rows returned |
@@ -64,6 +66,14 @@ Unknown action → `{"success":false,"error":"Unknown action. Available actions:
 is the change that makes those pages contact- and information-first. It was
 required on all three; the pages had to open a district modal before they could
 show anything.
+
+**`farmers` is the one public listing built out of `onboarding_applications`.**
+That table holds `phone_number`, `whatsapp_number`, `email` and `national_id`
+alongside the columns this action reads, and `privacy.php` §3 promises a public
+contact listing only for the buyer and seller directories. So the query selects
+no contact column at all and restricts to `status = 'approved'`. Both properties
+are gated in `tests/run.sh` against the shipped query text, and asserted against
+the live JSON in `tests/browser/directory_flow.mjs` step 14.
 
 ### Registration endpoints (`register.php`, not `api.php`)
 
@@ -87,10 +97,10 @@ show anything.
 | `market_insights` | `.sql:341` | `api.php:market_insights`, `ussd/logic.php` | seed only |
 | `sellers` | `.sql:472` | `api.php:sellers`, `ussd/logic.php` | `admin/index.php` promotion |
 | `seller_contact_details` | `.sql:511` | `api.php:sellers` | `admin/index.php` promotion |
-| `seller_crops` | `.sql:550` | `api.php:sellers` | seed only |
+| `seller_crops` | `.sql:550` | `api.php:sellers` | `admin/index.php` promotion |
 | `buyers` | `.sql:55` | `api.php:buyers`, `ussd/logic.php` | `admin/index.php` promotion |
 | `buyer_contact_details` | `.sql:89` | `api.php:buyers` | `admin/index.php` promotion |
-| `buyer_crops` | `.sql:131` | `api.php:buyers` | seed only |
+| `buyer_crops` | `.sql:131` | `api.php:buyers` | `admin/index.php` promotion |
 | `pest_control_tips` | `.sql:384` | `api.php`, `ussd/` | seed only |
 | `farming_best_practices` | `.sql:276` | `api.php`, `ussd/` | seed only |
 | `basic_farming_info` | `.sql:30` | `api.php`, `ussd/` | seed only |
@@ -160,7 +170,7 @@ re-render in place.
 |---|---|---|
 | `app.js` `this.texts` | 44 | 44 |
 | `assets/js/register.js` `copy` | 78 | 78 |
-| `assets/js/directory-navigation.js` `copy` | 26 | 26 |
+| `assets/js/directory-navigation.js` `copy` | 41 | 41 |
 | `assets/js/market-insights-page.js` `copy` | 19 | 19 |
 | `register.php` `REGISTRATION_STRINGS` | 32 | 32 |
 
@@ -207,7 +217,7 @@ used to wrap it, so the destination of a dashboard tile depended on load order.
 | `api.php` `submit_application`, `check_duplicate` | Second registration path with weaker validation — accepted un-normalised phones, ignored WhatsApp |
 | Registration modal in `partials/modals.php` | Duplicate element IDs with `register.php` |
 | ~320 lines of registration code in `app.js` | Same |
-| `price-locations.php`, `price-submit.php`, `price-location-selector.js/.css` | Queried `price_markets` and `price_areas` — **tables that exist in no schema**. `price-locations.php` returned HTTP 500 on every request |
+| `price-locations.php`, `price-submit.php`, `price-location-selector.js/.css` | Queried `price_markets` and `price_areas` — tables the schema *file* omitted, so the endpoint returned HTTP 500 on any database built from it. The tables are real (see §above); the feature stays retired by decision, not because they were missing |
 | `directory-api.php` | Duplicated `api.php`'s sellers/buyers query with its own DB bootstrap |
 | `app.js` `loadSellers`, `loadBuyers`, `loadMarketInsights` | District-first duplicates of the standalone pages |
 | `app.js` `showCropDetails`, `getCropFarmingTips`, `getCropMarkets` | Zero call sites repo-wide (build plan objective 3.4) |

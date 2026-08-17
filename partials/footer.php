@@ -51,6 +51,7 @@
             <a href="/weather.php">Weather</a>
             <a href="/sellers.php">Sellers</a>
             <a href="/buyers.php">Buyers</a>
+            <a href="/farmers.php">Farmers</a>
             <a href="/register.php">Register</a>
             <a href="/status.php">Check Status</a>
             <a href="/privacy.php">Privacy</a>

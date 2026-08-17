@@ -459,15 +459,22 @@ Verified: 41 PHP cases, 44 JS cases, and a 39-input corpus diffed across both
 implementations for exact parity. `tests/phone_test.php` and
 `tests/phone_test.mjs` are the standing contract.
 
-### Two tables that never existed
+### Two tables I wrongly called imaginary
+
+> **CORRECTED — read "Where I was wrong about price_markets" below before
+> trusting this section.** `price_markets` and `price_areas` DO exist in
+> production, with 120 and 216 rows. They were missing from the schema *file*,
+> which is not the same thing, and the schema file has since been fixed.
 
 `price-locations.php` and `price-submit.php` queried **`price_markets` and
-`price_areas`**. Those tables appear in no schema, no migration, and no
-`CREATE TABLE` anywhere in the repository. `price-locations.php` returned HTTP
-500 on every request; `price-location-selector.js` swallowed it in a
-`console.warn` and silently did nothing, on a `MutationObserver` loop.
-`price-submit.php` also inserted `area_id` and `verified`, columns
-`crowdsourced_prices` does not have.
+`price_areas`**. Those tables appeared in no schema, no migration, and no
+`CREATE TABLE` anywhere in the repository — which I read as "they do not
+exist" rather than "the schema file is incomplete". `price-locations.php`
+returned HTTP 500 on every request against a database built from that file;
+`price-location-selector.js` swallowed it in a `console.warn` and silently did
+nothing, on a `MutationObserver` loop. `price-submit.php` also inserted
+`area_id` and `verified`, columns the schema file did not then declare on
+`crowdsourced_prices` (production has both).
 
 All four files deleted. The working path — `api.php?action=submit_price` against
 the real `markets` table — was tested and kept.
@@ -816,6 +823,105 @@ to back — registration 26, directory 30, navigation 20, language 46.
 - `districts` holds 29 rows: Malawi's 28 plus `Mzuzu`, a city inside Mzimba.
 - The export has no `DROP TABLE IF EXISTS`, so it cannot be re-run over an
   existing database (error 1050).
+
+---
+
+## 2026-08-17 (later) — CROP FILTER, CROPS ON CARDS, FARMER DIRECTORY
+
+User request, three parts: filter buyers and sellers by crop with a dropdown;
+make the cards say what each contact specialises in; add a listing of everyone
+registered as a farmer.
+
+### The crops were never being written — DONE
+
+The cards showed no crops for a reason nobody had looked for. `register.php`
+captured `crops_of_interest`, `api.php` joined `seller_crops` / `buyer_crops` to
+render them, and **no code path anywhere wrote those two tables.** They held
+seed rows and nothing else; every contact approved through the admin panel since
+the schema was created had zero crops. `.claude/SYSTEM_MAP.md` recorded both as
+"seed only" — accurate, and read for two passes as a fact about the data rather
+than a missing write path.
+
+`admin/index.php` `admin_link_applicant_crops()` now writes them on approval,
+matching `crops_of_interest` back to `crops.name`. Name matching is safe here
+only because `register.php` stores the names it reads back out of the `crops`
+table rather than the text the browser sent (`register.php:398-435`); a token
+that matches no crop is skipped, never invented, because `crop_id` carries an FK.
+
+`tests/promotion_test.php` is new and is the gate: it slices the real promotion
+functions out of `admin/index.php`, runs them against a live database, and
+asserts the links. Canary-tested — commenting out the seller link call turns 11
+passes into 2 failures.
+
+### Crop filter — DONE
+
+A third `<select>` on all three directories, populated from the crops the loaded
+rows actually name (not all nine, six of which would lead to an empty page).
+
+`api.php` now returns `crops` as an **array** beside `crops_display`. The filter
+matches the array, not a substring of the string — `Beans` selecting every
+`Soybeans` grower is the obvious way to get this wrong, and the browser test
+asserts every surviving card names the picked crop exactly. The GROUP_CONCAT
+separator was changed from `", "` to a newline so the split cannot break on a
+crop name containing a comma.
+
+Server-side, `farmers&crop=` matches a whole `", "`-delimited token, and the
+parameter is run through `agro_escape_like()` first — binding stops a parameter
+changing the SQL but not the LIKE *pattern*, and `crop=%` would otherwise match
+everything. Verified: `crop=Beans` → 2, `crop=%` → 0, `crop=_eans` → 0.
+
+### Every card names its crops — DONE
+
+Always rendered, with a labelled strip, three chips, `+N more`, and a muted
+"no crops listed" when there are none. The empty state is deliberate: a card
+that silently omits the row leaves the reader unable to tell whether the listing
+has no crops or the page failed to show them.
+
+### Farmer directory — DONE, with one thing the request did not ask for
+
+`farmers.php`, the `farmers` API action, a nav entry, a footer link and a home
+service card. Same controller as sellers/buyers — a third near-identical
+controller is exactly the duplication this project spent a pass deleting.
+
+**The listing publishes no contact details, and that is a deviation worth
+naming.** Farmers have no directory table; approval is recorded on the
+application, so the only place to read them from is `onboarding_applications` —
+which holds `phone_number`, `whatsapp_number`, `email` and `national_id` in the
+columns either side of the ones this query reads. `privacy.php` §3 promised a
+public listing only for "a buyer or seller directory". Nobody who registered as
+a farmer agreed to have their number published. So:
+
+- the query selects no contact column at all — the omission, not a filter
+  further down the stack, is what makes the leak impossible;
+- only `status = 'approved'` rows are listed, matching sellers and buyers;
+- `privacy.php` now states exactly what the roster publishes and what it never
+  does.
+
+Both properties are gated in `tests/run.sh` against the shipped query text and
+canary-tested in both directions, and asserted against the live JSON payload in
+`tests/browser/directory_flow.mjs` step 14 — checking only the rendered page
+would pass while the numbers sat in the JSON for anyone with dev tools.
+
+### Verified
+
+`tests/run.sh` 64/64. `promotion_test.php` 11/11. Browser: directory 51
+assertions (sellers, buyers, farmers, crop filter, privacy), registration,
+navigation, language, WhatsApp all pass. `page_health` 84 checks 0 problems
+across 14 pages × 6 widths; `chichewa_overflow` 39 checks 0 problems. Edge
+states exercised with real fixtures: a seller with zero crops renders "no crops
+listed", a farmer with all nine renders `+6 more`, both at 320px in Chichewa
+with zero horizontal overflow.
+
+### Open
+
+- The registration form itself does not yet tell a farmer their name will be
+  listed publicly. `privacy.php` does, and it is linked from every page footer,
+  but the point of collection is the better place. Not done: it needs new
+  strings in two tables and a change to a form the brief says not to redesign
+  without cause. **Flagged for the user to decide.**
+- Production's 14 sellers/buyers are all `- TEST` rows with empty crop links, so
+  the crop filter on production will show nothing until real contacts are
+  approved. The wiring is correct; the data is not there yet.
 
 ---
 

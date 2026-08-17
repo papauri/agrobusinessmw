@@ -12,7 +12,7 @@
 import { chromium } from 'playwright';
 const base = 'http://127.0.0.1:8080';
 const pages = ['index.php','register.php','status.php','prices.php','weather.php',
-  'market-insights.php','sellers.php','buyers.php','pest-control.php',
+  'market-insights.php','sellers.php','buyers.php','farmers.php','pest-control.php',
   'farming-tips.php','farming-guide.php','basic-info.php'];
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium' });
 let bad = 0, checks = 0;

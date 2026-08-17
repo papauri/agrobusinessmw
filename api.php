@@ -61,6 +61,35 @@ function stmt_fetch_one(mysqli_stmt $stmt): ?array
     return $rows[0] ?? null;
 }
 
+/**
+ * Split a concatenated crop list into a clean, de-duplicated, sorted array.
+ *
+ * Two callers with two separators: the seller/buyer directories GROUP_CONCAT
+ * with a newline (a crop name can contain a comma one day; it will never
+ * contain a newline), and the farmer directory reads the ", "-joined text
+ * register.php wrote into onboarding_applications.crops_of_interest.
+ */
+function agro_split_crops(?string $value, string $separator): array
+{
+    if ($value === null || $value === '') return [];
+    $parts = array_map('trim', explode($separator, $value));
+    $parts = array_values(array_unique(array_filter($parts, static fn($p) => $p !== '')));
+    sort($parts, SORT_NATURAL | SORT_FLAG_CASE);
+    return $parts;
+}
+
+/**
+ * Escape the LIKE metacharacters in a value that is going into a LIKE pattern.
+ *
+ * Binding a parameter stops it changing the SQL, but it does not stop it
+ * changing the *pattern*: `crop=%` bound into `LIKE CONCAT('%, ', ?, ', %')`
+ * matches every row. Backslash first, or it re-escapes its own output.
+ */
+function agro_escape_like(string $value): string
+{
+    return str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $value);
+}
+
 // FEWS reference-rate helpers (fews_get_prices/fews_fetch_prices/fews_district_map/fews_match_district)
 require_once __DIR__ . '/config/fews.php';
 
@@ -352,7 +381,7 @@ try {
             if ($isSellers) {
                 $query = "SELECT s.id, s.name, s.district_id, d.name AS district_name,
                                  scd.phone_number, scd.whatsapp_number, scd.email, scd.address,
-                                 GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS crops_display
+                                 GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR '\n') AS crops_concat
                           FROM sellers s
                           JOIN districts d ON s.district_id = d.id
                           LEFT JOIN seller_contact_details scd ON s.contact_id = scd.id
@@ -362,7 +391,7 @@ try {
             } else {
                 $query = "SELECT b.id, b.name, b.district_id, d.name AS district_name,
                                  bcd.phone_number, bcd.whatsapp_number, bcd.email, bcd.address,
-                                 GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS crops_display
+                                 GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR '\n') AS crops_concat
                           FROM buyers b
                           JOIN districts d ON b.district_id = d.id
                           LEFT JOIN buyer_contact_details bcd ON b.contact_id = bcd.id
@@ -396,6 +425,91 @@ try {
             if ($types !== '') $stmt->bind_param($types, ...$params);
             if (!$stmt->execute()) throw new Exception('Directory query failed.');
             $rows = stmt_fetch_all($stmt);
+
+            // Each row carries its crops twice: `crops` for code and
+            // `crops_display` for people.
+            //
+            // The GROUP_CONCAT separator above is a newline, not ", ". That is
+            // deliberate. The browser builds the crop filter by splitting this
+            // value, and splitting on a comma silently breaks the day someone
+            // adds a crop named "Beans, Sugar". A newline cannot occur inside a
+            // crops.name, so the split is exact. (`'\n'` sits in a
+            // double-quoted PHP string, so PHP — not MySQL — turns it into the
+            // newline before the statement is ever prepared.)
+            foreach ($rows as &$row) {
+                $row['crops'] = agro_split_crops($row['crops_concat'] ?? '', "\n");
+                $row['crops_display'] = implode(', ', $row['crops']);
+                unset($row['crops_concat']);
+            }
+            unset($row);
+
+            echo json_encode([
+                'success'   => true,
+                'data'      => $rows,
+                'count'     => count($rows),
+                'timestamp' => date('c'),
+            ]);
+            break;
+
+        // ── DIRECTORY: farmers ──────────────────────────────────────────────
+        // Approved farmers, newest first. Same contact-first shape as the seller
+        // and buyer directories with one deliberate difference: NO CONTACT
+        // DETAILS ARE SELECTED AT ALL.
+        //
+        // Farmers have no directory table — approval is recorded on the
+        // application itself (admin/index.php promotes only sellers and buyers),
+        // so this reads onboarding_applications directly. That table also holds
+        // phone_number, whatsapp_number, email and national_id, and privacy.php
+        // promises a public listing only for "a buyer or seller directory".
+        // Nobody who registered as a farmer agreed to have their number
+        // published, so the query does not fetch those columns. The omission —
+        // not a filter further down the stack — is what makes the leak
+        // impossible.
+        //
+        // Pending and denied applications are excluded for the same reason
+        // sellers and buyers appear only once approved: an unreviewed
+        // application is not a vetted listing.
+        case 'farmers':
+            $district_id = (int)($_GET['district_id'] ?? 0);
+            $crop        = trim($_GET['crop'] ?? '');
+
+            $query = "SELECT oa.id, oa.full_name AS name, oa.district_id, d.name AS district_name,
+                             oa.village, oa.crops_of_interest AS crops_concat, oa.created_at
+                      FROM onboarding_applications oa
+                      JOIN districts d ON oa.district_id = d.id
+                      WHERE oa.user_type = 'farmer' AND oa.status = 'approved'";
+
+            $types  = '';
+            $params = [];
+            if ($district_id > 0) {
+                $query .= " AND oa.district_id = ?";
+                $types .= 'i';
+                $params[] = $district_id;
+            }
+            if ($crop !== '') {
+                // crops_of_interest is register.php's ", "-joined list of names
+                // taken from the crops table, so a whole-token match is exact.
+                // Wrapping both sides in ", " stops "Beans" matching "Soybeans",
+                // and the LIKE metacharacters in the parameter are escaped so a
+                // crafted crop=% cannot turn this into "match everything".
+                $query .= " AND CONCAT(', ', oa.crops_of_interest, ', ') LIKE CONCAT('%, ', ?, ', %')";
+                $types .= 's';
+                $params[] = agro_escape_like($crop);
+            }
+            $query .= " ORDER BY oa.created_at DESC, oa.id DESC";
+
+            $stmt = $mysqli->prepare($query);
+            if (!$stmt) throw new Exception('Farmer directory query could not be prepared.');
+            if ($types !== '') $stmt->bind_param($types, ...$params);
+            if (!$stmt->execute()) throw new Exception('Farmer directory query failed.');
+            $rows = stmt_fetch_all($stmt);
+
+            foreach ($rows as &$row) {
+                $row['crops'] = agro_split_crops($row['crops_concat'] ?? '', ',');
+                $row['crops_display'] = implode(', ', $row['crops']);
+                unset($row['crops_concat']);
+            }
+            unset($row);
 
             echo json_encode([
                 'success'   => true,

@@ -14,6 +14,7 @@
         <a class="app-nav-link" href="market-insights.php" data-nav="market-insights.php"><span class="material-symbols-rounded">insights</span> Market Insights</a>
         <a class="app-nav-link" href="sellers.php" data-nav="sellers.php"><span class="material-symbols-rounded">storefront</span> Sellers</a>
         <a class="app-nav-link" href="buyers.php" data-nav="buyers.php"><span class="material-symbols-rounded">shopping_basket</span> Buyers</a>
+        <a class="app-nav-link" href="farmers.php" data-nav="farmers.php"><span class="material-symbols-rounded">agriculture</span> Farmers</a>
         <a class="app-nav-link" href="pest-control.php" data-nav="pest-control.php"><span class="material-symbols-rounded">pest_control</span> Pest Control</a>
         <a class="app-nav-link" href="farming-tips.php" data-nav="farming-tips.php"><span class="material-symbols-rounded">tips_and_updates</span> Farming Tips</a>
         <a class="app-nav-link" href="farming-guide.php" data-nav="farming-guide.php"><span class="material-symbols-rounded">menu_book</span> Farming Guide</a>

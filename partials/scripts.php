@@ -31,15 +31,15 @@ $service = $service ?? null;
 <script src="assets/js/config.js"></script>
 <script src="assets/js/i18n.js?v=20260816-0002"></script>
 <script src="assets/js/phone-normalizer.js?v=20260816-0002"></script>
-<script src="assets/js/app.js?v=20260816-0002" defer></script>
-<script src="assets/js/directory-navigation.js?v=20260816-0002" defer></script>
+<script src="assets/js/app.js?v=20260817-0001" defer></script>
+<script src="assets/js/directory-navigation.js?v=20260817-0001" defer></script>
 <script src="assets/js/market-insights-page.js?v=20260816-0001" defer></script>
 <script src="assets/js/sortable-table.js" defer></script>
 <script src="assets/js/price-report-story.js" defer></script>
 <script src="assets/js/quiet-db-notification.js" defer></script>
 <link rel="stylesheet" href="assets/css/price-report-story.css">
 <link rel="stylesheet" href="assets/css/district-theme.css">
-<link rel="stylesheet" href="assets/css/directory-navigation.css?v=20260816-0002">
+<link rel="stylesheet" href="assets/css/directory-navigation.css?v=20260817-0001">
 <link rel="stylesheet" href="assets/css/market-insights-page.css?v=20260816-0001">
 <script>
 window.addEventListener('load',function(){

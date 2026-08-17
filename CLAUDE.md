@@ -84,7 +84,7 @@ Five translation tables, all with complete key parity:
 |---|---|
 | `app.js` `this.texts` | dashboard and the shared views |
 | `assets/js/register.js` `copy` | the registration page |
-| `assets/js/directory-navigation.js` `copy` | Sellers / Buyers |
+| `assets/js/directory-navigation.js` `copy` | Sellers / Buyers / Farmers |
 | `assets/js/market-insights-page.js` `copy` | Market Insights |
 | `register.php` `REGISTRATION_STRINGS` | server-side validation + the applicant's email |
 
@@ -132,6 +132,7 @@ App → http://localhost:8080 · API health → http://localhost:8080/api.php?ac
 ```bash
 bash tests/run.sh              # lint + phone contract + i18n parity + structural gates
 php  tests/phone_test.php      # phone normalisation contract
+php  tests/promotion_test.php  # approval → directory promotion (NEEDS a database)
 node tests/phone_test.mjs      # browser/server parity
 python3 tests/i18n_parity.py   # en/ci key parity across all five tables
 
@@ -156,7 +157,7 @@ non-existent table, or a committed credential reappears.
 | `index.php` | Dashboard / home |
 | `register.php` | **Registration — form, preflight and submit. Standalone.** |
 | `status.php` | Application status lookup (uses the shared status modal) |
-| `prices.php`, `weather.php`, `market-insights.php`, `sellers.php`, `buyers.php`, `pest-control.php`, `farming-tips.php`, `farming-guide.php`, `basic-info.php`, `privacy.php` | Feature pages |
+| `prices.php`, `weather.php`, `market-insights.php`, `sellers.php`, `buyers.php`, `farmers.php`, `pest-control.php`, `farming-tips.php`, `farming-guide.php`, `basic-info.php`, `privacy.php` | Feature pages |
 | `api.php` | All read APIs plus community price submission |
 | `admin/index.php` | Standalone admin panel — session login, CSRF, throttle |
 | `config/database.php` | `.env` loading, DB connection, `get_result()`-free fetch helpers |
@@ -165,7 +166,7 @@ non-existent table, or a committed credential reappears.
 | `config/fews.php` | FEWS reference-price helpers |
 | `assets/js/app.js` | Main controller — `AgroBusinessRevolution` class |
 | `assets/js/register.js` | Registration controller |
-| `assets/js/directory-navigation.js` | Sellers/Buyers contact-first directory |
+| `assets/js/directory-navigation.js` | Sellers / Buyers / Farmers directories |
 | `assets/js/market-insights-page.js` | Market Insights page |
 | `assets/js/phone-normalizer.js` | Canonical phone normalisation (browser) |
 | `assets/js/i18n.js` | Shared language state (`AgroLang`) |
@@ -189,6 +190,7 @@ can read errors. Routing via `?action=`:
 | `market_insights` | `district_id?` | **Optional** district. Omit for all districts |
 | `sellers` | `district_id?`, `crop?` | **Optional** district — contact-first directory |
 | `buyers` | `district_id?`, `crop?` | **Optional** district — contact-first directory |
+| `farmers` | `district_id?`, `crop?` | Approved farmer registrations. **Selects no contact column** — see below |
 | `pest_control` | `crop_id`, `district_id` | |
 | `farming_tips` | `crop_id` | |
 | `basic_info` | — | |
@@ -197,6 +199,41 @@ can read errors. Routing via `?action=`:
 | `check_application` | `ref` | Public status lookup |
 
 Registration is **not** here — it is `register.php`.
+
+### The `farmers` action — read this before changing it
+
+`farmers` is the only public listing built straight out of
+`onboarding_applications`, and that table holds `phone_number`,
+`whatsapp_number`, `email` and `national_id` in the columns either side of the
+ones it reads. Farmers have no directory table of their own — `admin/index.php`
+promotes sellers and buyers only — so there is nowhere safer to read from.
+
+Two rules, both gated in `tests/run.sh` against the shipped query text:
+
+- **Select no contact column.** Not "filter it out later" — never fetch it. A
+  `SELECT oa.*` here publishes every farmer's phone number.
+- **`status = 'approved'` only.** An unreviewed application is not a vetted
+  listing, exactly as for sellers and buyers.
+
+`privacy.php` §3 states what the farmer roster publishes (name, district,
+village, crops) and what it never does. Change one and change the other.
+
+## Crops in the directory
+
+Three things carry the "what do they deal in" answer, and they have to agree:
+
+- `admin/index.php` `admin_link_applicant_crops()` writes `seller_crops` /
+  `buyer_crops` on approval, matching `crops_of_interest` back to `crops.name`.
+  Nothing wrote those tables before 2026-08-17, which is why every approved
+  contact showed no crops. Covered by `tests/promotion_test.php`.
+- `api.php` returns `crops` (an array) alongside `crops_display` (a string).
+  **Filter on the array, never by substring of the string** — `Beans` would
+  otherwise select every `Soybeans` grower. The GROUP_CONCAT separator is a
+  newline, not `", "`, so a crop name containing a comma cannot break the split.
+- `assets/js/directory-navigation.js` builds the crop dropdown from the crops
+  the loaded rows actually name, and always renders a crops strip on a card —
+  including a muted "no crops listed", so an absent strip never has to be
+  interpreted.
 
 ## Database — 24 tables
 

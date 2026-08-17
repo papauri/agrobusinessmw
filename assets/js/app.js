@@ -33,6 +33,8 @@ class AgroBusinessRevolution {
                 find_sellers_desc: 'Connect with suppliers',
                 find_buyers: 'Find Buyers',
                 find_buyers_desc: 'Find markets for your produce',
+                find_farmers: 'Registered Farmers',
+                find_farmers_desc: 'See who has registered',
                 pest_control: 'Pest Control',
                 pest_control_desc: 'Combat pests effectively',
                 farming_tips: 'Farming Tips',
@@ -79,6 +81,8 @@ class AgroBusinessRevolution {
                 find_sellers_desc: 'Lumikizanani ndi ogulitsa',
                 find_buyers: 'Pezani Ogula',
                 find_buyers_desc: 'Pezani msika wa zokolola',
+                find_farmers: 'Alimi Olembetsa',
+                find_farmers_desc: 'Onani amene alembetsa',
                 pest_control: 'Kuteteza Tizirombo',
                 pest_control_desc: 'Menyana ndi tizirombo bwino',
                 farming_tips: 'Malangizo Alimi',
@@ -1207,11 +1211,13 @@ class AgroBusinessRevolution {
         // them here keeps one navigation system with one obvious answer.
         //   register        → register.php        (the only registration flow)
         //   sellers/buyers  → sellers.php/buyers.php (contact-first directory)
+        //   farmers         → farmers.php          (same directory, no contacts)
         //   market-insights → market-insights.php (information-first page)
         const standalonePages = {
             'register': 'register.php',
             'sellers': 'sellers.php',
             'buyers': 'buyers.php',
+            'farmers': 'farmers.php',
             'market-insights': 'market-insights.php'
         };
         if (standalonePages[service]) {

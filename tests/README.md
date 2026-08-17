@@ -75,6 +75,25 @@ UPDATE seller_contact_details SET whatsapp_number='+265991000001' WHERE id=1;
 UPDATE seller_contact_details SET whatsapp_number='+265991000002' WHERE id=2;
 ```
 
+`directory_flow.mjs` step 13 needs at least one **approved** farmer application
+to exercise the farmer detail view; with none it prints SKIP for that part and
+still asserts the API contract. To seed one, register through `register.php` and
+approve it:
+
+```sql
+UPDATE onboarding_applications SET status='approved'
+ WHERE user_type='farmer' AND application_ref='AGR-...';
+```
+
+`promotion_test.php` is the only PHP test that needs a database. It slices the
+promotion functions out of `admin/index.php`, runs them against real tables, and
+deletes its own fixtures. It is deliberately not in `run.sh`, which is
+static-only.
+
+```bash
+php tests/promotion_test.php
+```
+
 `chichewa_overflow.mjs` is separate from `page_health.mjs` because Chichewa
 strings are longer: a layout can pass in English and overflow once translated.
 

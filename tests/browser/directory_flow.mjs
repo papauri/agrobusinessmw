@@ -1,5 +1,5 @@
 /**
- * Sellers / Buyers directory and Market Insights, driven in a real browser.
+ * Sellers / Buyers / Farmers directories and Market Insights, in a real browser.
  *
  *   node tests/browser/directory_flow.mjs
  *
@@ -7,7 +7,10 @@
  *
  * What this guards, in one sentence each:
  *  - Contacts are the first thing on screen; district is a filter, not a gate.
+ *  - Every card says what that contact deals in, including when it is nothing.
+ *  - The crop filter matches whole crop names, so Beans never selects Soybeans.
  *  - A shared deep link opens the contact WITH the directory behind it.
+ *  - The farmer roster publishes NO phone, WhatsApp or email — ever.
  *  - Market Insights is an information page, not a district picker.
  */
 
@@ -70,7 +73,37 @@ await page.goBack();
 await page.waitForTimeout(900);
 assert(!page.url().includes('district_id='), 'URL filter cleared on back');
 
-step(6, 'Opening a contact shows call / WhatsApp / email / share');
+step(6, 'The crop filter narrows the list, and only to growers of that crop');
+assert(await page.locator('#directory-crop').isVisible(), 'crop filter present');
+assert((await page.inputValue('#directory-crop')) === '', 'crop filter starts empty (All crops)');
+const cropOptions = await page.locator('#directory-crop option').allTextContents();
+assert(cropOptions.length > 1, `crop options populated from the listings (${cropOptions.slice(1).join(', ')})`);
+const pickedCrop = cropOptions[1];
+await page.selectOption('#directory-crop', pickedCrop);
+await page.waitForTimeout(600);
+const cropFiltered = await page.locator('.directory-card').count();
+assert(cropFiltered > 0 && cropFiltered < cards, `crop filter applied (${cropFiltered} of ${cards})`);
+assert(page.url().includes('crop='), `URL carries the crop: ${page.url().split('?').pop()}`);
+// Every remaining card must actually name that crop. A substring match would
+// let "Beans" through on a Soybeans grower; this is the assertion that catches it.
+const chipSets = await page.locator('.directory-card .directory-crops').allInnerTexts();
+const everyCardNamesIt = chipSets.every(txt =>
+  txt.split('\n').map(s => s.trim()).includes(pickedCrop));
+assert(everyCardNamesIt, `every card left lists "${pickedCrop}" exactly`);
+
+step(7, 'Crop and district filters combine, and Back peels them off');
+await page.goBack();
+await page.waitForTimeout(700);
+assert(!page.url().includes('crop='), 'back cleared the crop filter');
+
+step(8, 'Every card says what the contact deals in');
+const stripCount = await page.locator('.directory-card .directory-crops').count();
+const cardCount = await page.locator('.directory-card').count();
+assert(stripCount === cardCount, `all ${cardCount} cards carry a crops strip (${stripCount})`);
+const labelled = await page.locator('.directory-card .directory-crops-label').count();
+assert(labelled === cardCount, `all ${cardCount} crop strips are labelled (${labelled})`);
+
+step(9, 'Opening a contact shows call / WhatsApp / email / share');
 await page.locator('.directory-card').first().click();
 await page.waitForTimeout(700);
 assert(await page.locator('#directory-detail-modal.active').isVisible(), 'detail modal opened');
@@ -85,12 +118,12 @@ assert(share > 0, 'share button present');
 const waHref = await page.locator('#directory-detail-body a[href^="https://wa.me/"]').first().getAttribute('href');
 assert(/^https:\/\/wa\.me\/\d{8,}$/.test(waHref), `WhatsApp link is digits-only: ${waHref}`);
 
-step(7, 'Escape closes the detail');
+step(10, 'Escape closes the detail');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(700);
 assert(!(await page.locator('#directory-detail-modal.active').count()), 'detail closed on Escape');
 
-step(8, 'A shared deep link renders the directory behind the contact');
+step(11, 'A shared deep link renders the directory behind the contact');
 const deepId = await page.locator('.directory-card').first().getAttribute('data-id');
 await page.goto(base + '/sellers.php?seller_id=' + deepId, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(2200);
@@ -99,15 +132,62 @@ assert((await page.locator('.directory-card').count()) > 0, 'directory rendered 
 
 /* ── Buyers ──────────────────────────────────────────────────────────────── */
 
-step(9, 'Buyers behaves the same way');
+step(12, 'Buyers behaves the same way');
 await page.goto(base + '/buyers.php', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(2000);
 assert((await page.locator('.directory-card').count()) > 0, 'buyer contacts rendered immediately');
 assert(await page.locator('#directory-search').isVisible(), 'buyer search present');
+assert(await page.locator('#directory-crop').isVisible(), 'buyer crop filter present');
+
+/* ── Farmers ─────────────────────────────────────────────────────────────── */
+
+step(13, 'Farmers is a directory of everyone registered as a farmer');
+const farmerApi = await page.evaluate(async b => {
+  const r = await fetch(b + '/api.php?action=farmers', { headers: { Accept: 'application/json' } });
+  return r.json();
+}, base);
+assert(farmerApi.success === true, 'the farmers API answers');
+
+await page.goto(base + '/farmers.php', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(2000);
+const farmerCards = await page.locator('.directory-card').count();
+assert(farmerCards === farmerApi.count, `every approved farmer is on the page (${farmerCards} of ${farmerApi.count})`);
+assert(await page.locator('#directory-search').isVisible(), 'farmer search present');
+assert(await page.locator('#directory-crop').isVisible(), 'farmer crop filter present');
+assert(await page.locator('#directory-district').isVisible(), 'farmer district filter present');
+
+step(14, 'A farmer listing publishes no contact details at all');
+// Two layers, both asserted: the payload must not carry the columns, and the
+// page must not render a way to dial anyone. Checking only the page would pass
+// even if the numbers were sitting in the JSON for anyone with dev tools.
+const leakedKeys = new Set();
+(farmerApi.data || []).forEach(row =>
+  ['phone_number', 'whatsapp_number', 'email', 'national_id'].forEach(k => {
+    if (k in row) leakedKeys.add(k);
+  }));
+assert(leakedKeys.size === 0, `farmers API sends no contact columns (found: ${[...leakedKeys].join(', ') || 'none'})`);
+
+if (farmerCards > 0) {
+  await page.locator('.directory-card').first().click();
+  await page.waitForTimeout(700);
+  assert(await page.locator('#directory-detail-modal.active').isVisible(), 'farmer detail opened');
+  const farmerTel = await page.locator('#directory-detail-body a[href^="tel:"]').count();
+  const farmerWa = await page.locator('#directory-detail-body a[href^="https://wa.me/"]').count();
+  const farmerMail = await page.locator('#directory-detail-body a[href^="mailto:"]').count();
+  assert(farmerTel === 0 && farmerWa === 0 && farmerMail === 0,
+    `no call/WhatsApp/email action on a farmer (tel=${farmerTel} wa=${farmerWa} mail=${farmerMail})`);
+  assert((await page.locator('.directory-no-contact').count()) > 0, 'the page says why there is no number');
+  assert((await page.locator('#directory-detail-body .directory-label').first().textContent()).length > 0,
+    'the farmer detail leads with their crops');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+} else {
+  console.log('   SKIP  no approved farmers in this database — detail view not exercised');
+}
 
 /* ── Market Insights ─────────────────────────────────────────────────────── */
 
-step(10, 'Market Insights is information-first, not a district picker');
+step(15, 'Market Insights is information-first, not a district picker');
 let insightRequests = 0;
 page.on('request', r => { if (r.url().includes('action=market_insights')) insightRequests++; });
 await page.goto(base + '/market-insights.php', { waitUntil: 'domcontentloaded' });
@@ -118,16 +198,16 @@ assert(insightCards > 0, `insight cards shown immediately (${insightCards})`);
 assert(await page.locator('#mi-district').isVisible(), 'district is an optional filter on the page');
 assert((await page.inputValue('#mi-district')) === 'all', 'defaults to All Malawi');
 
-step(11, 'Insights load in ONE request, not one per district');
+step(16, 'Insights load in ONE request, not one per district');
 assert(insightRequests === 1, `market_insights requests on load: ${insightRequests} (was 28 before)`);
 
-step(12, 'Narrowing to a district still works');
+step(17, 'Narrowing to a district still works');
 await page.selectOption('#mi-district', { index: 1 });
 await page.waitForTimeout(800);
 assert(page.url().includes('district_id='), 'district refinement is reflected in the URL');
 assert((await page.locator('.mi-card').count()) > 0, 'district view still shows information');
 
-step(13, 'No console errors across the whole flow');
+step(18, 'No console errors across the whole flow');
 assert(errors.length === 0, `console errors: ${errors.length ? errors.join(' | ') : 'none'}`);
 
 await browser.close();
