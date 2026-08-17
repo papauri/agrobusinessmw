@@ -26,7 +26,7 @@ This replaces the 2026-07-10 map, which described an app that no longer exists
 | Farming tips | `farming-tips.php` | `app.js` | `farming_tips` | `farming_best_practices`, `crops` | both |
 | Farming guide | `farming-guide.php` | `app.js` | none — client-side content | — | web only |
 | Basic info | `basic-info.php` | `app.js` | `basic_info` | `basic_farming_info` | both |
-| **Registration** | **`register.php`** | **`register.js`** | **none — `register.php` owns its own POST** | `onboarding_applications`, `districts`, `crops` | both |
+| **Registration** | **`register.php`** (web) · **`ussd/registration.php`** (USSD, main menu `10`) | **`register.js`** | **none — `config/registration.php` `register_store()` is the single write path for both channels** | `onboarding_applications`, `districts`, `crops` | **both** |
 | Status lookup | `status.php` | `app.js` (status modal) | `check_application` | `onboarding_applications`, `districts` | both |
 | Privacy | `privacy.php` | — | none | — | web only |
 | Admin | `admin/index.php` | inline | none — direct SQL | `admin_users`, `admin_login_attempts`, `onboarding_applications`, `crowdsourced_prices`, `price_overrides`, `sellers`, `buyers`, contact tables | web (admin) |
@@ -242,6 +242,13 @@ used to wrap it, so the destination of a dashboard tile depended on load order.
 - **Legacy contact numbers.** Rows written before canonicalisation may hold local
   formats. Nothing rewrites them: a bulk UPDATE that guesses a country code is
   exactly the mistake the app now refuses to make. Every read path tolerates both.
+- **USSD registration exists as of 2026-08-17** (main menu `10`), so a farmer
+  with a feature phone can finally join rather than only read. It shares
+  config/registration.php with the web form — the rules are not duplicated.
+- **A USSD menu page must fit 182 CHARACTERS**, gated in `tests/run.sh`. The main
+  menu was 234 (271 in Chichewa) until that gate was added, so every page had
+  been over the documented ceiling since it was written. Whether the operator
+  was tolerating it or truncating it cannot be known without a live shortcode.
 - **USSD is now exercised locally, not against a gateway.** `ussd/index.php` is
   driven by POSTing the gateway's own field set (`sessionId`, `phoneNumber`,
   `serviceCode`, `text`) to a local server, in both languages. What that cannot

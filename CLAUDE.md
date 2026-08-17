@@ -18,7 +18,7 @@ A **dual-channel agricultural platform** for Malawian farmers:
 | Pages | PHP 8.3+, no framework. `index.php` plus 12 feature pages, shared `partials/` |
 | Frontend | Vanilla JS, no framework. `assets/js/app.js` plus per-page controllers |
 | Backend API | `api.php` — single file, action-based routing (`?action=`), MySQLi |
-| Registration | `register.php` — standalone, owns its own POST handler. See below |
+| Registration | `config/registration.php` holds the rules; `register.php` (web) and `ussd/registration.php` (USSD) are the channels. See below |
 | USSD handler | `ussd/` — POST from the gateway, replies `CON`/`END` |
 | Database | MySQL, database `p601229_AgroBusiness_MW` |
 | Hosting | cPanel — `agrobusinessmw.com` → `/home/p601229/public_html/agrobusinessmw/` |
@@ -30,9 +30,17 @@ A **dual-channel agricultural platform** for Malawian farmers:
 
 ## Registration — read this before touching it
 
-`register.php` + `assets/js/register.js` + `assets/css/register.css` are the
-**only** registration implementation. This is deliberate and enforced by
-`tests/run.sh`.
+**The rules live in `config/registration.php`. The channels are presentation.**
+
+| File | Owns |
+|---|---|
+| `config/registration.php` | What a valid application is, what counts as a duplicate, the reference format, and the **single** INSERT (`register_store()`). Both channels call it. |
+| `register.php` + `assets/js/register.js` + `assets/css/register.css` | The **web** form, preflight, JSON contract and notification email |
+| `ussd/registration.php` | The **USSD** step machine — which question comes next, nothing more |
+
+Add a channel by calling `register_store()` with a new `channel` value.
+`tests/run.sh` fails if a second `INSERT INTO onboarding_applications` appears
+anywhere. This is deliberate and enforced.
 
 The project previously had three competing flows writing to the same table: a
 modal in `partials/modals.php` driven by ~320 lines of `app.js`, a set of bolt-on
@@ -42,7 +50,8 @@ so the same person could be stored two different ways. They are gone.
 Rules:
 - Do **not** recreate a registration modal, and do not move any of this into
   `index.php`.
-- Do **not** add a second submit endpoint. Extend `register.php`.
+- Do **not** add a second submit endpoint or a second INSERT. Extend
+  `config/registration.php` and call `register_store()`.
 - `register.php` handles all three verbs itself:
   - `GET register.php` renders the form
   - `GET register.php?action=preflight` JSON duplicate check while typing
@@ -78,7 +87,7 @@ The reader's language lives in `localStorage.preferredLanguage` (`'en'` / `'ci'`
 `app.js` routes its own switcher through `_persistLanguage()` so the standalone
 pages re-render instead of waiting for a reload.
 
-Five translation tables, all with complete key parity:
+Six translation tables, all with complete key parity:
 
 | Table | Covers |
 |---|---|
@@ -86,15 +95,17 @@ Five translation tables, all with complete key parity:
 | `assets/js/register.js` `copy` | the registration page |
 | `assets/js/directory-navigation.js` `copy` | Sellers / Buyers / Farmers |
 | `assets/js/market-insights-page.js` `copy` | Market Insights |
-| `register.php` `REGISTRATION_STRINGS` | server-side validation + the applicant's email |
+| `config/registration.php` `REGISTRATION_STRINGS` | server-side validation + the applicant's email, both channels |
+| `ussd/menus.php` `$menu_texts` | every USSD page, gated by `tests/ussd_menu_parity.php` |
 
 Rules:
 - **Never hardcode a user-facing string** in a controller. Add a key to that
   file's table. `tests/run.sh` fails on new hardcoded strings in the standalone
   controllers, and `tests/i18n_parity.py` fails on any key missing from either
   language.
-- `register.php` cannot read localStorage, so the client sends `lang` with the
-  preflight and the POST. Errors come back localised, plus a stable `code` for
+- `config/registration.php` cannot read localStorage, so the web client sends
+  `lang` with the preflight and the POST, and the USSD handler passes the
+  language it already has. Both go through `register_lang()`. Errors come back localised, plus a stable `code` for
   anything that needs to branch on the reason rather than the prose.
 - The applicant's confirmation email goes out in the language they registered
   in. The review team's copy is always English.
@@ -133,9 +144,10 @@ App → http://localhost:8080 · API health → http://localhost:8080/api.php?ac
 bash tests/run.sh              # lint + phone contract + i18n parity + structural gates
 php  tests/phone_test.php      # phone normalisation contract
 php  tests/promotion_test.php  # approval → directory promotion (NEEDS a database)
-php  tests/ussd_directory_test.php  # USSD Find Sellers/Buyers (NEEDS a database)
+php  tests/ussd_directory_test.php     # USSD Find Sellers/Buyers (NEEDS a database)
+php  tests/ussd_registration_test.php # USSD registration end to end (NEEDS a database)
 node tests/phone_test.mjs      # browser/server parity
-python3 tests/i18n_parity.py   # en/ci key parity across all five tables
+python3 tests/i18n_parity.py   # en/ci key parity across the five web tables
 php  tests/ussd_menu_parity.php     # en/ci parity across the USSD menus
 
 # Browser tests — need a running server and a database
@@ -308,18 +320,42 @@ Things the schema will tell you that the code does not:
   select Chichewa — `00` toggles it, and the toggle must be in the same
   `sessionId`. Worth knowing before you conclude the translation is broken.
 
-### A CON page is 182 bytes
+### A CON page is 182 CHARACTERS
 
-Africa's Talking truncates anything longer, mid-word and without warning — which
-on a directory page means half a phone number. `"CON "` and the trailing back
-menu are spent before a single line of content, and the Chichewa back menu is 11
-bytes longer than the English one.
+Not bytes — one emoji is four bytes and one character, and these menus are full
+of them. Africa's Talking truncates anything longer, mid-word and without
+warning, which on a directory page means half a phone number. `"CON "` and the
+trailing back menu are spent before a single line of content, and the Chichewa
+back menu is 11 characters longer than the English one.
+
+`tests/run.sh` walks `$menu_texts` and fails on any page over the limit. It had
+to: the main menu was **234 characters (271 in Chichewa)** until 2026-08-17, so
+every page had been over the ceiling since the menu was written. Either the
+operator is more generous than the documentation or those pages have been
+truncating in production — nobody can tell without a live shortcode, so the gate
+holds the documented number.
 
 Anything that renders a variable number of rows must go through
 `ussd_page_budget()` and `ussd_fit_lines()` in `ussd/helpers.php`: the budget is
 derived from the actual suffix, whole lines are kept or dropped (never cut), and
 the dropped count is shown. `tests/ussd_directory_test.php` asserts the ceiling
 in both languages.
+
+### Registration over USSD
+
+`10` on the main menu. `ussd/registration.php` asks role → name → district →
+village → crops → business name (sellers and buyers only) → confirm, then calls
+`register_store()`. The caller's phone comes from the gateway's `phoneNumber`;
+they never type it.
+
+Two things that look odd until you know why:
+
+- **It does not use `parse_navigation()` or `$stack`.** That parser reads `0` as
+  Back and `9` as Next Page, and crop 9 is Beans — a caller picking Beans would
+  have the answer eaten as pagination. Registration keeps its own state in the
+  session file and consumes exactly one token per request, the last one.
+- **`seen` counts tokens already processed.** A gateway re-delivering the same
+  accumulated text must redraw the page, not advance the flow.
 
 ### The directory over USSD
 

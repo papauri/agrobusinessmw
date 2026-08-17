@@ -572,17 +572,18 @@ inline prose links, which WCAG 2.5.5 exempts.
 
 | # | Criterion | Status |
 |---|---|---|
-| 1 | Both channels work | **PARTIAL** — web verified end to end; USSD untouched and unverifiable without a gateway. DEFERRED-TO-HUMAN |
+| 1 | Both channels work | **MET in code, gateway test DEFERRED** — USSD gained registration (2026-08-17) and its directory now matches api.php. Every USSD path is exercised through `process_ussd()`; no live shortcode was available. Farmer roster and crop filter remain web-only by design |
 | 2 | No unverifiable claims | **MET** — all 14 actions exercised, shapes recorded in SYSTEM_MAP; every table read by code or noted as seed-only |
 | 3 | Security floor | **MET for the web channel** — prepared statements throughout, DB output escaped, no credential in the repo, error leakage closed. Admin is session+CSRF+throttle |
-| 4 | Bilingual parity | **NOT MET** — `app.js` keys are 44/44, but `register.php`/`register.js` and `directory-navigation.js` are English-only. See 3.5 below |
+| 4 | Bilingual parity | **MET** (2026-08-16/17) — six tables at full parity, gated by `tests/i18n_parity.py` and `tests/ussd_menu_parity.php` |
 | 5 | Accessible on a cheap phone | **MET on measurables** — no overflow 320→1280, 44px targets, labels associated, Escape closes modals. Contrast (3.2) still open |
 | 6 | One design system | **PARTIAL** — new CSS uses tokens and a min-width ladder; `style.css`'s existing `max-width` queries are unchanged (3.1 still open) |
-| 7 | Clean gate | **MET** — `bash tests/run.sh`: 57 passed, 0 failed. All 13 pages load with an empty console |
+| 7 | Clean gate | **MET** — `bash tests/run.sh`: 72 passed, 0 failed. All 14 pages load with an empty console |
 | 8 | Docs match code | **MET** — CLAUDE.md and SYSTEM_MAP.md rewritten against the code and re-verified |
 
-**The project is NOT complete by its own definition.** Criteria 1, 4 and 6 are
-not met and 5 is partial. What was in front of me — registration, the schema,
+**Scorecard above was refreshed 2026-08-17.** Criteria 1 and 4 are now met in
+code; 5 is partial (contrast) and 6 is partial (breakpoints). Those two are the
+remaining blockers, plus the deferred-to-human list. What was in front of me — registration, the schema,
 the directory, insights, security, responsive behaviour — is done and tested.
 
 ### Objectives closed this pass
@@ -823,6 +824,113 @@ to back — registration 26, directory 30, navigation 20, language 46.
 - `districts` holds 29 rows: Malawi's 28 plus `Mzuzu`, a city inside Mzimba.
 - The export has no `DROP TABLE IF EXISTS`, so it cannot be re-run over an
   existing database (error 1050).
+
+---
+
+## 2026-08-17 (fifth) — REGISTRATION OVER USSD (completion criterion 1)
+
+The gap the user picked: a farmer with a feature phone could read prices,
+weather, sellers and buyers, and could not join. `onboarding_applications.channel`
+has been `enum('web','ussd')` since the schema was written, so this was always
+intended; nothing ever implemented it.
+
+### The rules moved; they were not copied
+
+CLAUDE.md says "do not add a second submit endpoint" for a reason this project
+paid for once — three flows, three sets of validation, one table. Writing an
+INSERT into `ussd/` would have recreated it exactly.
+
+So `config/registration.php` is new and holds what a valid application IS:
+`REGISTRATION_STRINGS`, `register_lang`/`register_t`, `RegistrationError`,
+`register_require_phone`, `register_find_duplicates`, `register_validate`,
+`register_reference`, and a new `register_store()` that does duplicate-check →
+reference → INSERT. 375 lines moved out of `register.php`, which kept only what
+is genuinely web: the form, the JSON contract, `register_respond_then_continue()`
+and the notification email. `ussd/registration.php` owns the menu and nothing
+else. `tests/run.sh` now fails if a second `INSERT INTO onboarding_applications`
+appears anywhere — canary-tested.
+
+### Why registration does not use parse_navigation()
+
+Every other USSD branch replays the accumulated text through
+`parse_navigation()`. Registration must not, and the reason is concrete: that
+parser reads `9` as Next Page, and **crop 9 is Beans**. A caller choosing Beans
+would have the answer swallowed as pagination and never registered for it. `0`
+has the same problem against Back.
+
+Positional indexing into the raw tokens is no better — `1*7*0*10*…` puts the
+register option in a different slot the moment somebody visits another menu
+first. So registration keeps its own state in the session file that already
+carries the language, and consumes exactly one token per request: the last.
+`seen` records how many have been processed, so a gateway re-delivering the same
+text redraws the page instead of advancing twice. Both are asserted.
+
+### A 182-character ceiling that was never being met
+
+Adding a tenth main-menu option meant measuring the menu, which turned up
+something bigger: **the main menu was 234 characters, and 271 in Chichewa**,
+against a documented 182-character CON limit. Two weather pages and two district
+pages were over too. So these pages have been over the ceiling since they were
+written — either Africa's Talking is more generous than its documentation, or
+the main menu has been truncating in production for as long as it has existed,
+which nobody could see without a live shortcode.
+
+Trimming, not extending, is the only change that is safe under both readings.
+The labels are shorter; **the numbers are unchanged**, because callers know them
+by heart. Every page now fits, and `tests/run.sh` walks `$menu_texts` and fails
+on any page over the limit — canary-tested.
+
+**A correction to yesterday's work.** `ussd_page_budget()` and `ussd_fit_lines()`
+counted BYTES. The limit is characters, and an emoji is four bytes to one
+character, so the directory was dropping listings that would have fitted. Both
+now use `mb_strlen`, and `ussd_directory_test.php` asserts characters.
+
+### The flow
+
+`10` on the main menu → role → name → district → village → crops → business name
+(sellers and buyers only) → confirm → `register_store()`. The caller's number
+comes from the gateway's `phoneNumber` and is normalised by `config/phone.php`;
+**they never type it**, which is the one thing this channel does better than the
+web form. Somebody who has already applied is told so at the first step, with
+their reference and status, rather than after six questions.
+
+### Verified
+
+`tests/ussd_registration_test.php` is new and drives `process_ussd()` with the
+gateway's own POST fields — the whole path, not the step function. **31/31**,
+including: the row lands with `channel='ussd'` and the caller's MSISDN; crop 9 is
+selectable and stored; a re-delivered submit inserts once; a seller is asked for
+a business name and a farmer is not; cancelling stores nothing; an unreadable
+MSISDN is refused with somewhere else to go; and the whole flow in Chichewa.
+
+`tests/run.sh` 72/72 · `promotion_test.php` 32/32 · `ussd_directory_test.php`
+19/19 · every browser flow passing, including `registration_flow.mjs`, which is
+what proves the 375-line extraction did not break the web form.
+
+Canary-tested four ways: a menu page pushed over 182, a second INSERT added, the
+registration dispatch removed from `logic.php`, and the retry guard removed.
+
+### Two fixture mistakes worth recording
+
+Both cost a debugging round and both were mine, not the code's:
+
+1. `fresh_phone()` generated `+26588` + 8 digits — a **ten**-digit national part.
+   `config/phone.php` correctly refused every one of them and the test looked
+   like a code failure. The validator was right and I doubted it first.
+2. The cleanup check counted rows by name, so a row left behind by my own manual
+   curl walkthrough was reported as this run's leak. Fixtures now carry a
+   per-run tag. Same lesson as `promotion_test.php`, one day later.
+
+### Open
+
+- **Only 24 of 29 districts are reachable.** `$district_map` is 3 pages of 8, and
+  the districts table has 29. A farmer in one of the missing five cannot register
+  over USSD at all. Pre-existing — the same picker limits Weather and Market
+  Insights — but registration is where it stops being cosmetic. Not fixed here;
+  it needs a fourth page and a re-check of every branch that paginates.
+- **Still no live gateway test.** Everything above is `process_ussd()` in
+  process. What it cannot tell us is how a real operator handles a full-length
+  page, a session timeout, or a re-delivery.
 
 ---
 

@@ -11,6 +11,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/menus.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/weather.php';  // Add this line
+require_once __DIR__ . '/registration.php';
 require_once __DIR__ . '/logic.php';
 
 // Process USSD request and get response

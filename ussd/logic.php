@@ -160,6 +160,42 @@ function process_ussd(mysqli $mysqli, array $menu_texts, array $valid_options, a
 
     $response = '';
 
+    // ── REGISTRATION ────────────────────────────────────────────────────────
+    // Handled before everything below, and deliberately NOT through $stack.
+    //
+    // parse_navigation() reads '0' as Back and '9' as Next Page, which is right
+    // for a menu and wrong for an answer: crop 9 is Beans, and a caller picking
+    // Beans would have their choice eaten as pagination. So registration keeps
+    // its own state in the session file and consumes one token per request.
+    // See the header of ussd/registration.php.
+    $reg = is_array($saved['reg'] ?? null) ? $saved['reg'] : [];
+    $raw_tokens = array_values(array_filter(array_map('trim', explode('*', $stripped_text)), 'strlen'));
+    $entering_registration = !$reg
+        && count($raw_tokens) >= 2
+        && end($raw_tokens) === USSD_REGISTER_OPTION;
+
+    if ($reg || $entering_registration) {
+        $response = ussd_registration_step(
+            $mysqli, $menu_texts, $language, (string)($_POST['phoneNumber'] ?? ''),
+            $reg, $raw_tokens, $district_map
+        );
+        if (strpos($response, 'END') === 0) {
+            if (file_exists($session_file)) unlink($session_file);
+        } else {
+            file_put_contents($session_file, json_encode([
+                'stack'         => $stack,
+                'language'      => $language,
+                'district_page' => $pages['district'],
+                'weather_page'  => $pages['weather'],
+                // An empty $reg means the flow ended without ending the session
+                // — cancelling from the first question drops back to the main
+                // menu, and the key must not survive that.
+                'reg'           => $reg ?: null,
+            ]));
+        }
+        return $response;
+    }
+
     // ── EXIT ────────────────────────────────────────────────────────────────
     if ($is_exit) {
         $response = $menu_texts['exit'][$language];

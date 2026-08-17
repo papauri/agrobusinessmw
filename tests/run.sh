@@ -122,6 +122,44 @@ count=$(printf '%s\n' "$farmers_block" | grep -cE 'phone_number|whatsapp_number|
 printf '%s\n' "$farmers_block" | grep -q "oa.status = 'approved'"
 report $? "the farmers query lists only approved registrations"
 
+# Exactly ONE write path into onboarding_applications. Three competing
+# registration flows once wrote to this table with three different sets of
+# validation; the web and USSD channels now share config/registration.php's
+# register_store(), and this is what stops a fourth appearing.
+count=$(grep -rl "INSERT INTO onboarding_applications" --include='*.php' . 2>/dev/null \
+    | grep -v '^./.claude/' | grep -v '^./tests/' | wc -l)
+[ "$count" -eq 1 ]; report $? "exactly one INSERT into onboarding_applications (found $count file(s))"
+
+# Every USSD page must fit what Africa's Talking will deliver. A CON response is
+# capped at 182 CHARACTERS and truncated mid-line beyond it — on a directory page
+# that means half a phone number, on a menu it means missing options. The main
+# menu was 234 characters (271 in Chichewa) until 2026-08-17, so this gate is the
+# only thing that keeps it honest.
+php -r '
+require "ussd/menus.php";
+$bad = [];
+$walk = function ($node, $path) use (&$walk, &$bad) {
+    if (!is_array($node)) return;
+    if (isset($node["en"]) || isset($node["ci"])) {
+        foreach (["en", "ci"] as $lang) {
+            $v = $node[$lang] ?? null;
+            if (is_string($v)) {
+                if (mb_strlen("CON " . $v) > 182) $bad[] = "$path/$lang=" . mb_strlen("CON " . $v);
+            } elseif (is_array($v)) {
+                foreach ($v as $k => $t) {
+                    if (mb_strlen("CON " . $t) > 182) $bad[] = "$path/$lang/pg$k=" . mb_strlen("CON " . $t);
+                }
+            }
+        }
+        return;
+    }
+    foreach ($node as $k => $child) $walk($child, $path === "" ? $k : "$path.$k");
+};
+$walk($menu_texts, "");
+if ($bad) { fwrite(STDERR, "  over 182 chars: " . implode(", ", $bad) . "\n"); exit(1); }
+exit(0);'
+report $? "every USSD menu page fits the 182-character CON limit"
+
 # The standalone controllers must not hardcode a user-facing string outside
 # their copy tables — that is how register.js and the directory ended up
 # English-only in the first place.

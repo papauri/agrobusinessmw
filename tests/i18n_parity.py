@@ -72,7 +72,7 @@ TABLES = [
     ('assets/js/directory-navigation.js', lambda p: js_table(p, '    const copy = {')),
     ('assets/js/market-insights-page.js', lambda p: js_table(p, '    const copy = {')),
     ('assets/js/app.js', lambda p: js_table(p, '        this.texts = {')),
-    ('register.php', php_table),
+    ('config/registration.php', php_table),   # REGISTRATION_STRINGS moved here when USSD started sharing the rules
 ]
 
 

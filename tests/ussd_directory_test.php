@@ -14,9 +14,9 @@
  *   2. Every listing says what the contact deals in. That is the whole reason to
  *      ring one of them, and USSD showed nothing at all.
  *   3. A page never exceeds what Africa's Talking will deliver. A CON response
- *      is capped at 182 bytes and truncated mid-line beyond that — which would
- *      cut a phone number in half. Chichewa's back menu is 11 bytes longer than
- *      English's, so both languages are checked.
+ *      is capped at 182 CHARACTERS and truncated mid-line beyond that — which
+ *      would cut a phone number in half. Chichewa's back menu is 11 characters
+ *      longer than English's, so both languages are checked.
  *
  * NOT guarded, because it is not reachable: a listing with no contact row at
  * all. `sellers.contact_id` is `int NOT NULL` with an ON DELETE RESTRICT
@@ -147,7 +147,7 @@ try {
         $body = ussd_fit_lines($langLines, $budget, $menu_texts['directory']['more'][$lang]);
         $page = 'CON ' . $body . $suffix;
 
-        check(strlen($page) <= 182, "[$lang] the whole CON page fits in 182 bytes (" . strlen($page) . ')');
+        check(mb_strlen($page) <= 182, "[$lang] the whole CON page fits in 182 chars (" . mb_strlen($page) . ')');
         check($body !== '', "[$lang] something is actually shown");
 
         // No partial listings: every line except the "+N more" note must be one

@@ -138,16 +138,28 @@ function ussd_fetch_all(mysqli_stmt $stmt): array {
 // answering differently if that constraint is ever relaxed.
 
 /**
- * Bytes available for the body of one USSD page.
+ * Characters available for the body of one USSD page.
  *
- * Africa's Talking caps a CON response at 182 bytes and truncates anything
- * longer — mid-word, mid-phone-number, without warning. "CON " and the trailing
- * back menu are spent before a single listing is written, and the Chichewa back
- * menu is 11 bytes longer than the English one, so the budget is derived from
- * the actual suffix rather than assumed.
+ * Africa's Talking caps a CON response at 182 **characters** and truncates
+ * anything longer — mid-word, mid-phone-number, without warning. "CON " and the
+ * trailing back menu are spent before a single listing is written, and the
+ * Chichewa back menu is 11 characters longer than the English one, so the budget
+ * is derived from the actual suffix rather than assumed.
+ *
+ * CHARACTERS, NOT BYTES. This counted bytes when it was first written, which is
+ * the wrong unit and too strict: one emoji is four bytes and one character, and
+ * this menu system is full of them. Counting bytes silently dropped listings
+ * that would have fitted.
+ *
+ * A caveat worth knowing: `$menu_texts['main_menu']` was 234 characters (271 in
+ * Chichewa) before it was trimmed on 2026-08-17, so the shipped menus had been
+ * over this ceiling from the start. Either the operator is more generous than
+ * the documentation, or those pages have been truncating in production all
+ * along. Nobody can tell without a live shortcode — so this budget stays at the
+ * documented number rather than the number we might get away with.
  */
 function ussd_page_budget(string $suffix): int {
-    return max(40, 182 - strlen('CON ') - strlen($suffix));
+    return max(40, 182 - mb_strlen('CON ') - mb_strlen($suffix));
 }
 
 /**
@@ -161,13 +173,13 @@ function ussd_page_budget(string $suffix): int {
 function ussd_fit_lines(array $lines, int $budget, string $more_template): string {
     if (!$lines) return '';
     $worst_note = count($lines) > 1
-        ? strlen("\n" . str_replace('{n}', (string)count($lines), $more_template))
+        ? mb_strlen("\n" . str_replace('{n}', (string)count($lines), $more_template))
         : 0;
 
     $kept = 0;
     $used = 0;
     foreach ($lines as $i => $line) {
-        $cost = strlen($line) + ($kept > 0 ? 1 : 0);   // +1 for the joining newline
+        $cost = mb_strlen($line) + ($kept > 0 ? 1 : 0);   // +1 for the joining newline
         $is_last = ($i === count($lines) - 1);
         $reserve = $is_last ? 0 : $worst_note;
         if ($used + $cost + $reserve > $budget) break;

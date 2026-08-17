@@ -92,6 +92,7 @@ deliberately outside `run.sh`, which is static-only.
 ```bash
 php tests/promotion_test.php        # approve/deny → directory, crop links, re-approval
 php tests/ussd_directory_test.php   # USSD Find Sellers / Find Buyers
+php tests/ussd_registration_test.php # USSD registration, through process_ussd()
 ```
 
 To drive the USSD handler by hand, POST the gateway's own fields. Note that the
