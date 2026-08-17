@@ -817,6 +817,73 @@ to back — registration 26, directory 30, navigation 20, language 46.
 - The export has no `DROP TABLE IF EXISTS`, so it cannot be re-run over an
   existing database (error 1050).
 
+---
+
+## 2026-08-17 — WHATSAPP WIRED; PRICE-LOCATION FEATURE RETIRED BY DECISION
+
+### whatsapp_number, end to end — DONE
+
+`seller_contact_details` and `buyer_contact_details` have carried a
+`whatsapp_number` column since before this repo's schema file knew about it, and
+**nothing read it**. An applicant supplied a WhatsApp number at registration, it
+was stored on `onboarding_applications`, and then dropped on approval — so the
+directory's WhatsApp button pointed at whatever sat in `phone_number`, on or off
+WhatsApp. Three links, all broken:
+
+| Link | Fix |
+|---|---|
+| `admin/index.php` | promotion INSERTs carry `whatsapp_number`; the feeding SELECT gains the column, `bind_result` 8 → 9, verified positionally |
+| `api.php` | `sellers`/`buyers` return it; added to SELECT **and** GROUP BY so the query stays valid under `ONLY_FULL_GROUP_BY` |
+| `directory-navigation.js` | prefers it, falls back to `phone_number`, shows it separately only when it differs, and includes it in the search haystack |
+
+Stored as NULL rather than `''` when absent: both columns carry a UNIQUE key, so
+empty strings would collide where NULLs do not.
+
+Verified against a live database, not by inspection: registered a seller with a
+distinct WhatsApp number, ran the real `admin_promote_applicant()`, and followed
+the number into the contact row, the API response and the rendered contact card.
+`tests/browser/whatsapp_flow.mjs` covers the dedicated-number path, the
+fall-back path and search.
+
+### Price-location feature — RETIRED, user decision 2026-08-17
+
+`price-locations.php`, `price-submit.php`, `price-location-selector.js/.css`
+stay deleted. **This is now a decision, not a mistake, and it should not be
+relitigated.**
+
+The history matters because I got it wrong once: I removed these files claiming
+`price_markets` and `price_areas` did not exist. They do exist in production,
+with 120 and 216 rows. Presented with that correction, the user chose to keep
+them removed on the merits:
+
+- `price-submit.php` was a **second** price-submission endpoint. It bypassed the
+  member matching and the statistical outlier gate in `api.php`'s `submit_price`,
+  so every report through it was stored `pending` and unverified.
+- `price-location-selector.js` was a `MutationObserver` bolt-on that re-scanned
+  the DOM on a timer, hijacked the form with `stopImmediatePropagation`, disabled
+  the page's real district select and reported results with `alert()`.
+- `crowdsourced_prices.area_id` is NULL on all 332 production rows: the area half
+  of the feature was never used even while it was live.
+
+**Nothing was destroyed.** The tables and their 336 rows remain in production and
+are declared in the schema of record, so this stays reversible. If it is ever
+rebuilt, rebuild it onto `api.php`'s `submit_price` so reports keep the member
+matching and the outlier gate — do not reintroduce a second endpoint.
+
+### Test data — left alone, by instruction
+
+Production's 8 `- TEST` sellers, 6 `- TEST` buyers, 14
+`@test.agrobusinessmw.local` contacts and 295 `admin-seed` price reports stay as
+they are. Recorded so the earlier finding is not mistaken for outstanding work.
+
+The consequence is unchanged and still worth stating: **the contact-first
+directory has no real contacts**, and `seller_crops`/`buyer_crops` are empty so
+no card shows crop chips and the crop filter matches nothing. That is a content
+problem, not a code one.
+
+`bash tests/run.sh` — 60 passed, 0 failed. Browser flows: registration 26,
+directory 30, navigation 20, language 46, whatsapp 8.
+
 ## Status log
 
 Append one line per completed cycle: `<date> · <objective> · <owner> · PASS|FAIL · <note>`

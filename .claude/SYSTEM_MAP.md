@@ -113,13 +113,26 @@ not from the database, and that file has now been regenerated from production.
 
 | Table | Status |
 |---|---|
-| `price_markets` | production has it, 120 rows; no reader in the repo since `price-locations.php` was removed |
+| `price_markets` | production has it, 120 rows; **no reader by decision** (2026-08-17) — see below |
 | `price_areas` | production has it, 216 rows; same |
 | `price_review_audit` | production has it, 332 rows; **read by `admin/price-audit.php`** |
 
 Also recovered into the schema file: `whatsapp_number` on both contact tables
-(no reader yet), and `area_id` / `verified` / `reviewed_by` / `reviewed_at` on
-`crowdsourced_prices`.
+(**now wired end to end** — see below), and `area_id` / `verified` /
+`reviewed_by` / `reviewed_at` on `crowdsourced_prices`.
+
+**`price_markets` / `price_areas` are intentionally unread.** The user decided on
+2026-08-17 to keep the price-location feature retired: its endpoint was a second
+price-submission path that bypassed `submit_price`'s member matching and outlier
+gate, and its client was a MutationObserver bolt-on that hijacked the form. The
+tables and their data stay, so the decision is reversible; if rebuilt, build it
+onto `api.php`'s `submit_price` rather than a new endpoint.
+
+**WhatsApp contact chain**: `onboarding_applications.whatsapp_number` →
+`admin/index.php` promotion → `seller_contact_details` / `buyer_contact_details`
+→ `api.php` `sellers`/`buyers` → `directory-navigation.js`, which prefers it and
+falls back to `phone_number`. Both contact columns are UNIQUE; store NULL, not
+`''`, when there is no number.
 
 **The schema of record is now complete.** Verified by restoring
 `p601229_AgroBusiness_MW.sql` into an empty database and diffing
