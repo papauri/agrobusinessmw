@@ -90,7 +90,7 @@ database. Both seed their own fixtures and delete them afterwards, and both are
 deliberately outside `run.sh`, which is static-only.
 
 ```bash
-php tests/promotion_test.php        # approval → seller/buyer + crop links
+php tests/promotion_test.php        # approve/deny → directory, crop links, re-approval
 php tests/ussd_directory_test.php   # USSD Find Sellers / Find Buyers
 ```
 

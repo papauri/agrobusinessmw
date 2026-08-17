@@ -280,6 +280,126 @@ function admin_link_applicant_crops(mysqli $db, string $userType, int $ownerId, 
     return $linked;
 }
 
+/**
+ * Find the directory row an applicant was promoted into, if any.
+ *
+ * The directory tables carry no back-reference to the application — `sellers` is
+ * id / name / district_id / contact_id and nothing else. The link is the phone
+ * number, and it is exact rather than a guess:
+ *
+ *   - promotion copies `onboarding_applications.phone_number` into the contact
+ *     row verbatim, so the two strings are identical, not merely similar;
+ *   - `phone_number` is NOT NULL on an application (and register.php refuses a
+ *     blank one), so every promoted applicant has one;
+ *   - `seller_contact_details.phone_number` carries a UNIQUE key
+ *     (p601229_AgroBusiness_MW.sql:1036, :893 for buyers), so one number
+ *     identifies at most one contact row.
+ *
+ * An earlier comment here dismissed "matching on name or phone" as fuzzy. That
+ * is true of a name and namesakes are a real hazard; it is not true of a UNIQUE
+ * phone number, and the two were being treated as one idea.
+ *
+ * The known limit: if the phone on the application is edited after approval, the
+ * contact row keeps the old one and this returns null. The callers are built to
+ * treat "no row found" as an ordinary outcome and say so, rather than to assume
+ * the delete happened.
+ */
+function admin_find_directory_row(mysqli $db, string $userType, ?string $phone): ?array
+{
+    $phone = trim((string)$phone);
+    if ($phone === '' || ($userType !== 'seller' && $userType !== 'buyer')) {
+        return null;
+    }
+
+    // Both branches are full literals — the table name is never interpolated.
+    $stmt = $userType === 'seller'
+        ? $db->prepare("SELECT s.id, s.contact_id FROM sellers s
+                        JOIN seller_contact_details scd ON s.contact_id = scd.id
+                        WHERE scd.phone_number = ? LIMIT 1")
+        : $db->prepare("SELECT b.id, b.contact_id FROM buyers b
+                        JOIN buyer_contact_details bcd ON b.contact_id = bcd.id
+                        WHERE bcd.phone_number = ? LIMIT 1");
+    if (!$stmt) {
+        throw new RuntimeException('the directory lookup could not be prepared');
+    }
+    $stmt->bind_param('s', $phone);
+    if (!$stmt->execute()) {
+        $stmt->close();
+        throw new RuntimeException('the directory lookup failed');
+    }
+    $rowId = 0;
+    $contactId = 0;
+    $stmt->bind_result($rowId, $contactId);
+    $found = $stmt->fetch();
+    $stmt->close();
+
+    return $found ? ['id' => (int)$rowId, 'contact_id' => (int)$contactId] : null;
+}
+
+/**
+ * Remove an applicant from the directory when their approval is withdrawn.
+ *
+ * WHY THIS EXISTS
+ *   Denying a previously approved seller left them in the public directory,
+ *   phone number and all. The application said "denied" and the site said
+ *   "call this person" — and the person had no way to tell.
+ *
+ * IT ALSO UNBLOCKS RE-APPROVAL, which was impossible. Verified before writing
+ *   this: approve → deny → approve does NOT create a duplicate row, as the
+ *   build plan recorded from 2026-08-14. `uniq_seller_contact_phone` rejects
+ *   the second contact insert, so the second approval throws and rolls back and
+ *   the applicant can never be approved again. That constraint reached the
+ *   schema of record on 2026-08-16, after the finding was filed. Removing the
+ *   contact row on denial is what makes the number free again.
+ *
+ * ORDER MATTERS. The seller/buyer row goes first: `fk_sellers_contact` is
+ * ON DELETE RESTRICT, so the contact row cannot be deleted while it is
+ * referenced. `fk_seller_crops_seller` is ON DELETE CASCADE, so the crop links
+ * go with the parent and are not deleted here.
+ *
+ * Returns 'sellers' / 'buyers' when a row was removed, '' when there was
+ * nothing to remove. Runs inside the caller's transaction.
+ */
+function admin_demote_applicant(mysqli $db, array $app): string
+{
+    $userType = (string)($app['user_type'] ?? '');
+    if ($userType !== 'seller' && $userType !== 'buyer') {
+        return '';   // farmers are never promoted, so there is nothing to undo
+    }
+
+    $row = admin_find_directory_row($db, $userType, $app['phone_number'] ?? null);
+    if ($row === null) {
+        return '';
+    }
+
+    if ($userType === 'seller') {
+        $dStmt = $db->prepare("DELETE FROM sellers WHERE id = ?");
+        $cStmt = $db->prepare("DELETE FROM seller_contact_details WHERE id = ?");
+    } else {
+        $dStmt = $db->prepare("DELETE FROM buyers WHERE id = ?");
+        $cStmt = $db->prepare("DELETE FROM buyer_contact_details WHERE id = ?");
+    }
+    if (!$dStmt || !$cStmt) {
+        throw new RuntimeException('the directory removal could not be prepared');
+    }
+
+    try {
+        $dStmt->bind_param('i', $row['id']);
+        if (!$dStmt->execute()) {
+            throw new RuntimeException('the directory row could not be removed');
+        }
+        $cStmt->bind_param('i', $row['contact_id']);
+        if (!$cStmt->execute()) {
+            throw new RuntimeException('the contact row could not be removed');
+        }
+    } finally {
+        $dStmt->close();
+        $cStmt->close();
+    }
+
+    return $userType === 'seller' ? 'sellers' : 'buyers';
+}
+
 function admin_promote_applicant(mysqli $db, array $app): string
 {
     $userType = (string)($app['user_type'] ?? '');
@@ -290,6 +410,16 @@ function admin_promote_applicant(mysqli $db, array $app): string
     //    onboarding_applications only. This branch is intentional, not an
     //    oversight — it mirrors the same decision in the API's old admin_review.
     if ($userType !== 'seller' && $userType !== 'buyer') {
+        return '';
+    }
+
+    // ── Already listed? Then this is a no-op, not an error.
+    //    Without this, promoting the same applicant twice hits
+    //    uniq_seller_contact_phone and raises a duplicate-key exception that
+    //    aborts the whole approval — leaving the admin with a failure and no
+    //    route forward. The caller's status-transition guard should stop it
+    //    getting here at all; this makes the second-order case survivable.
+    if (admin_find_directory_row($db, $userType, $app['phone_number'] ?? null) !== null) {
         return '';
     }
 
@@ -414,9 +544,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
         $denial = $action === 'deny' ? $notes : null;
         $aNote  = $action === 'approve' ? $notes : null;
 
-        $app        = null;
-        $promotedTo = '';
-        $committed  = false;
+        $app         = null;
+        $promotedTo  = '';
+        $demotedFrom = '';
+        $committed   = false;
 
         // One transaction covers the whole decision: read the applicant, promote
         // them into the directory, THEN write the status. Ordering matters as much
@@ -470,16 +601,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
                 throw new RuntimeException('no application with that id exists');
             }
 
-            // Double-promotion guard. The guard chosen is the STATUS TRANSITION:
-            // promote only when the row was not already 'approved'. Reason: the
-            // directory tables carry no back-reference to the application (see
-            // `sellers` — id/name/district_id/contact_id only), so an "is there
-            // already a directory row?" check could only guess by matching on name
-            // or phone, which is fuzzy and would wrongly block genuine namesakes.
-            // The application's own status is authoritative, and reading it under
-            // FOR UPDATE inside this transaction makes the check race-safe.
+            // The directory follows the decision, in both directions.
+            //
+            // The primary guard is the STATUS TRANSITION: act only when the
+            // status is actually changing. The application's own status is
+            // authoritative, and reading it under FOR UPDATE inside this
+            // transaction makes the check race-safe.
+            //
+            // Denying an approved applicant now REMOVES them from the directory.
+            // Before this, the application said "denied" and the site went on
+            // publishing their name and phone number to anyone who asked.
             if ($action === 'approve' && $app['status'] !== 'approved') {
                 $promotedTo = admin_promote_applicant($db, $app);
+            } elseif ($action === 'deny' && $app['status'] === 'approved') {
+                $demotedFrom = admin_demote_applicant($db, $app);
             }
 
             $stmt = $db->prepare(
@@ -525,8 +660,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
         }
 
         if ($committed) {
-            $actionMsg = "Application #{$id} {$status}."
-                       . ($promotedTo !== '' ? " Added to the {$promotedTo} directory." : '');
+            // Say what happened to the directory, including when nothing did.
+            // A denial that removed nobody is worth knowing about: it usually
+            // means the phone number on the application was edited after
+            // approval, so the listing is still out there under the old one.
+            $directoryNote = '';
+            if ($promotedTo !== '') {
+                $directoryNote = " Added to the {$promotedTo} directory.";
+            } elseif ($demotedFrom !== '') {
+                $directoryNote = " Removed from the {$demotedFrom} directory.";
+            } elseif ($action === 'deny' && $app && $app['status'] === 'approved'
+                      && in_array($app['user_type'], ['seller', 'buyer'], true)) {
+                $directoryNote = ' NOTE: no matching directory listing was found to remove'
+                               . ' — check the directory by hand for this contact.';
+            }
+            $actionMsg = "Application #{$id} {$status}." . $directoryNote;
         }
     }
 }

@@ -228,6 +228,29 @@ Three things carry the "what do they deal in" answer, and they have to agree:
   `buyer_crops` on approval, matching `crops_of_interest` back to `crops.name`.
   Nothing wrote those tables before 2026-08-17, which is why every approved
   contact showed no crops. Covered by `tests/promotion_test.php`.
+
+## Approval, denial, and the directory
+
+The directory follows the decision in **both** directions, and the link between
+an application and its directory row is the **contact's phone number**:
+
+- `admin_promote_applicant()` on approve; `admin_demote_applicant()` on deny.
+  Both are driven from the status *transition*, read under `FOR UPDATE` inside
+  one transaction.
+- `admin_find_directory_row()` matches `onboarding_applications.phone_number`
+  against `seller_contact_details.phone_number`. That is exact, not fuzzy:
+  promotion copies the number verbatim, the column is NOT NULL on an
+  application, and it carries a UNIQUE key on the contact table. **Never widen
+  this to the name** — namesakes are real and `tests/promotion_test.php` has an
+  assertion that fails if you do.
+- Denial deletes the directory row **before** the contact row
+  (`fk_sellers_contact` is `ON DELETE RESTRICT`). Crop links go by cascade.
+- Freeing the number on denial is also what makes **re-approval** possible. It
+  was not: the UNIQUE key rejected the second contact insert, so a second
+  approval threw and rolled back, and an applicant once denied could never be
+  approved again.
+- If the phone on the application is edited after approval, the match fails and
+  the admin panel says so explicitly rather than implying a removal happened.
 - `api.php` returns `crops` (an array) alongside `crops_display` (a string).
   **Filter on the array, never by substring of the string** — `Beans` would
   otherwise select every `Soybeans` grower. The GROUP_CONCAT separator is a

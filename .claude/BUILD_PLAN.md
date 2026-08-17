@@ -345,7 +345,7 @@ Close the gaps between what the schema promises and what the app delivers.
 
       **UNVERIFIED, stated plainly:** there is no `.env` in this sandbox, so **no database connection existed this session at all** — not even a `SELECT`. The seller and buyer INSERT paths have never been executed. Branch selection, the farmer no-op and the district guard *were* executed, against an unconnected `mysqli` so any stray DB reach would fail loudly. `onboarding_applications`' storage engine is unknown; if MyISAM, `rollback()` would not undo the status UPDATE (designed around by ordering, but unproven). The admin panel was never loaded — it connects to production on load.
 
-- [ ] **2.7 De-promotion, and the approve→deny→approve duplicate.** `FILED 2026-08-14 from the 2.6 cycle. Two findings, one root cause: nothing links a directory row back to its application.`
+- [x] **2.7 De-promotion, and the approve→deny→approve duplicate.** `DONE 2026-08-17 — see the log entry at the top. The second half of the finding was already stale: the UNIQUE phone key turns the double promotion into a failed re-approval, not a duplicate row.` `FILED 2026-08-14 from the 2.6 cycle. Two findings, one root cause: nothing links a directory row back to its application.`
       **(a) Denying a previously-approved applicant does not remove them from `sellers`/`buyers`.** The specialist found this and correctly reported it as out of brief. The deleted `admin_review` had the identical gap, so this is inherited, not introduced.
       **(b) Found in the main-session review of 2.6 — the interaction the specialist missed.** The double-promotion guard at `admin/index.php:383` is `$app['status'] !== 'approved'`. It correctly stops a re-clicked approve. It does **not** stop **approve → deny → approve**: at the second approve the status is `'denied'`, so the guard passes and the applicant is promoted a **second time** — a duplicate `sellers` row plus a duplicate orphaned contact row. (a) is what makes (b) reachable.
       **Do not fix (b) by tightening the guard alone.** The two are the same problem: with no back-reference from `sellers`/`buyers` to `onboarding_applications`, the status column is the only thing the code can reason about, and it is lossy. Real options: de-promote on deny (fixes both, but needs a "remove from directory" decision), or add a promotion back-reference (e.g. `onboarding_applications.promoted_ref`) — **which is a schema change, and 2.5 must land first** since the table has no `CREATE TABLE` of record.
@@ -600,8 +600,8 @@ the directory, insights, security, responsive behaviour — is done and tested.
 ### Still open, unchanged
 
 - **2.1** ratings / community Q&A write paths — product decision, not started.
-- **2.7** de-promotion on deny, and approve→deny→approve double promotion.
-  Still real. Needs a product decision plus a schema back-reference.
+- ~~**2.7** de-promotion on deny~~ — **DONE 2026-08-17.** No schema change was
+  needed in the end: the contact's UNIQUE phone number is the back-reference.
 - **3.1** breakpoint consolidation across `style.css`, `index.php`, `app.js`.
 - **3.2** contrast remediation (`--muted` 3.17:1, dark mode 3.63:1).
 - **3.5 NEW — bilingual parity beyond `app.js`.** `register.php`, `register.js`
@@ -823,6 +823,91 @@ to back — registration 26, directory 30, navigation 20, language 46.
 - `districts` holds 29 rows: Malawi's 28 plus `Mzuzu`, a city inside Mzimba.
 - The export has no `DROP TABLE IF EXISTS`, so it cannot be re-run over an
   existing database (error 1050).
+
+---
+
+## 2026-08-17 (fourth) — DE-PROMOTION ON DENY (objective 2.7 — DONE)
+
+User picked this off the suggestions list and chose the phone-match design over
+adding an `application_id` column, so no migration runs against production.
+
+### The recorded finding was half stale, and I checked before building on it
+
+2.7 said: denying an approved seller leaves them in the directory, **and**
+approve→deny→approve promotes twice, leaving a duplicate row and an orphan
+contact. The first half is real. **The second half stopped being true on
+2026-08-16**, when `uniq_seller_contact_phone` reached the schema of record.
+
+I ran it rather than reasoned about it. What actually happens today:
+
+```
+first promote:  sellers            (1 row)
+second promote: THREW mysqli_sql_exception:
+                Duplicate entry '+265917079298' for key 'uniq_seller_contact_phone'
+```
+
+So there is no duplicate row — there is a **failed approval**. An applicant who
+was approved and then denied could never be approved again: the second attempt
+threw, rolled back, and handed the admin an error with no route forward. That is
+a worse bug than the one on file, and it would have gone unnoticed for as long as
+the plan was trusted over the database.
+
+Standing rule 10: **a filed finding ages.** This one was written two days before
+the constraint that invalidated it. Re-run the reproduction before designing the
+fix — the schema moves underneath the plan.
+
+### What changed
+
+- `admin_find_directory_row()` — matches an application to its directory row by
+  the contact's phone number. The old comment here dismissed "matching on name
+  or phone" as fuzzy; that conflated two different things. A name is fuzzy and
+  namesakes are a real hazard. A phone number is not: promotion copies it
+  verbatim, `onboarding_applications.phone_number` is NOT NULL, and the contact
+  column carries a UNIQUE key. Exactly one row, or none.
+- `admin_demote_applicant()` — deletes the directory row, then the contact row
+  (that order is forced: `fk_sellers_contact` is `ON DELETE RESTRICT`). Crop
+  links go by cascade. Returns `''` rather than throwing when there is nothing
+  to remove, so a denial of a never-approved applicant is an ordinary outcome.
+- The review handler calls it on `deny` when the current status is `approved`,
+  inside the same transaction, under the same `FOR UPDATE` read.
+- `admin_promote_applicant()` now short-circuits if the applicant is already
+  listed, so a double promotion is a no-op instead of a duplicate-key abort.
+- The admin panel reports which way the directory moved — and says so explicitly
+  when a denial matched **nothing**, which usually means the phone was edited
+  after approval and the old listing is still out there.
+
+### The test found a hole in itself
+
+`tests/promotion_test.php` grew from 11 to 32 assertions. Mid-way I canary-tested
+by deleting the deny branch from the handler — **and every assertion still
+passed**, because they all called `admin_demote_applicant()` directly. The suite
+proved the function and said nothing about whether the admin panel ever calls it.
+That is standing rule 2 ("test the surface, not the diff") failing in a new
+costume.
+
+Fixed by evaluating the **real handler block** against a real
+`onboarding_applications` row and driving approve → deny → approve as the form
+does. Re-running the canary now fails with `listed=1 orphan=1`, which is the
+defect it is meant to catch.
+
+Also asserted: a namesake in the same district on a different number survives a
+denial. That is the assertion that fails if anyone widens the match to the name.
+
+### Verified
+
+`tests/run.sh` 67/67 · `promotion_test.php` **32/32** · `ussd_directory_test.php`
+19/19 · every browser flow passing. Canary-tested four ways: deny branch removed
+from the handler, contact row left orphaned, match widened from phone to name,
+and the earlier three on crops.
+
+### Open
+
+- The match cannot find a listing if the phone on the application was edited
+  after approval. The admin panel now says so rather than implying success, but
+  nothing repairs it. A back-reference column would; that is a migration, and the
+  user chose not to run one.
+- Still not exercised through the admin **web UI** — that needs a login session.
+  The handler block itself is now driven directly, which is most of the distance.
 
 ---
 

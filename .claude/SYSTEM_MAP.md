@@ -230,9 +230,15 @@ used to wrap it, so the destination of a dashboard tile depended on load order.
   over USSD but never leave one, and Q&A is USSD-read-only. Build plan 2.1.
 - **`crop_prices` action has no caller.** Superseded by `dual_crop_prices`. Left
   in place as a public read-only endpoint; harmless.
-- **De-promotion on deny is still missing** (`admin/index.php`). Denying a
-  previously approved seller/buyer leaves them in the directory, and
-  approve→deny→approve promotes twice. Build plan 2.7 — unchanged this pass.
+- ~~De-promotion on deny is still missing.~~ **CLOSED 2026-08-17.** Denying an
+  approved seller/buyer now removes their directory and contact rows, matched by
+  the contact's UNIQUE phone number. The second half of the old finding —
+  "approve→deny→approve promotes twice" — was **wrong by the time it was
+  written**: `uniq_seller_contact_phone` reached the schema of record on
+  2026-08-16 and rejects the duplicate, so the second approval threw and rolled
+  back instead, and the applicant could never be re-approved. Both behaviours
+  are covered by `tests/promotion_test.php`, including through the real review
+  handler.
 - **Legacy contact numbers.** Rows written before canonicalisation may hold local
   formats. Nothing rewrites them: a bulk UPDATE that guesses a country code is
   exactly the mistake the app now refuses to make. Every read path tolerates both.
