@@ -113,6 +113,147 @@ function ussd_fetch_all(mysqli_stmt $stmt): array {
     return $rows;
 }
 
+// ─── Directory (Find Sellers / Find Buyers) ──────────────────────────────────
+//
+// These replaced two inline queries in logic.php that had drifted away from
+// api.php's version of the same listing.
+//
+//   1. A NULL phone number rendered as nothing at all. The old line was
+//      "{name}: {phone_number}", and `seller_contact_details.phone_number` is
+//      nullable — so the caller got "Chikondi Nkhoma: " and a blank where the
+//      number should be, with no way to tell a missing number from a display
+//      bug. Every one of the 14 rows in production has a NULL phone today, so
+//      this was not a corner case there; it was the whole page.
+//   2. They listed no crops at all, so the one thing a caller needs in order to
+//      choose who to ring was the one thing they could not see. That is only
+//      fixable now: nothing wrote seller_crops / buyer_crops until
+//      admin_link_applicant_crops() was added on 2026-08-17.
+//
+// The joins onto the contact tables were also changed from INNER to LEFT, to
+// match api.php. That one is defence in depth, NOT a bug fix, and the
+// distinction is worth keeping straight: `sellers.contact_id` is `int NOT NULL`
+// with an `ON DELETE RESTRICT` foreign key (p601229_AgroBusiness_MW.sql:717,
+// :1260), so a listing with no contact row cannot exist and the inner join
+// could not have dropped one. It costs nothing and it stops the two channels
+// answering differently if that constraint is ever relaxed.
+
+/**
+ * Bytes available for the body of one USSD page.
+ *
+ * Africa's Talking caps a CON response at 182 bytes and truncates anything
+ * longer — mid-word, mid-phone-number, without warning. "CON " and the trailing
+ * back menu are spent before a single listing is written, and the Chichewa back
+ * menu is 11 bytes longer than the English one, so the budget is derived from
+ * the actual suffix rather than assumed.
+ */
+function ussd_page_budget(string $suffix): int {
+    return max(40, 182 - strlen('CON ') - strlen($suffix));
+}
+
+/**
+ * Fit whole lines into a byte budget, then say how many did not fit.
+ *
+ * Never returns a partial line: a truncated phone number is worse than an
+ * absent one. `$more_template` carries a `{n}` placeholder and is measured at
+ * its worst case (every line dropped), so the result cannot exceed the budget
+ * however the count falls.
+ */
+function ussd_fit_lines(array $lines, int $budget, string $more_template): string {
+    if (!$lines) return '';
+    $worst_note = count($lines) > 1
+        ? strlen("\n" . str_replace('{n}', (string)count($lines), $more_template))
+        : 0;
+
+    $kept = 0;
+    $used = 0;
+    foreach ($lines as $i => $line) {
+        $cost = strlen($line) + ($kept > 0 ? 1 : 0);   // +1 for the joining newline
+        $is_last = ($i === count($lines) - 1);
+        $reserve = $is_last ? 0 : $worst_note;
+        if ($used + $cost + $reserve > $budget) break;
+        $used += $cost;
+        $kept++;
+    }
+
+    if ($kept === 0) $kept = 1;   // one over-long line beats an empty page
+    $dropped = count($lines) - $kept;
+    $body = implode("\n", array_slice($lines, 0, $kept));
+    return $dropped > 0
+        ? $body . "\n" . str_replace('{n}', (string)$dropped, $more_template)
+        : $body;
+}
+
+/**
+ * One district's sellers or buyers, as formatted USSD lines.
+ *
+ * `$type` is 'seller' or 'buyer' and never reaches the SQL — both branches are
+ * full literals, so no value chosen by a caller can shape the statement.
+ *
+ * The average rating is a scalar subquery rather than a joined AVG on purpose:
+ * `ratings` and `seller_crops` joined into the same row set fan out against each
+ * other, and an aggregate computed over that product is a bug waiting for the
+ * first seller who has both several ratings and several crops.
+ */
+function ussd_directory_lines(mysqli $mysqli, string $type, int $district_id, array $labels): array {
+    $sellers = ($type === 'seller');
+
+    $sql = $sellers
+        ? "SELECT s.name,
+                  scd.phone_number,
+                  (SELECT AVG(r.rating_value) FROM ratings r WHERE r.seller_id = s.id) AS avg_rating,
+                  GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR '\n') AS crops_concat
+           FROM sellers s
+           LEFT JOIN seller_contact_details scd ON s.contact_id = scd.id
+           LEFT JOIN seller_crops sc ON s.id = sc.seller_id
+           LEFT JOIN crops c ON sc.crop_id = c.id
+           WHERE s.district_id = ?
+           GROUP BY s.id, s.name, scd.phone_number
+           ORDER BY s.name"
+        : "SELECT b.name,
+                  bcd.phone_number,
+                  NULL AS avg_rating,
+                  GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR '\n') AS crops_concat
+           FROM buyers b
+           LEFT JOIN buyer_contact_details bcd ON b.contact_id = bcd.id
+           LEFT JOIN buyer_crops bc ON b.id = bc.buyer_id
+           LEFT JOIN crops c ON bc.crop_id = c.id
+           WHERE b.district_id = ?
+           GROUP BY b.id, b.name, bcd.phone_number
+           ORDER BY b.name";
+
+    $stmt = $mysqli->prepare($sql);
+    if (!$stmt) { error_log('USSD directory prepare failed: ' . $mysqli->error); return []; }
+    $stmt->bind_param('i', $district_id);
+    if (!$stmt->execute()) { error_log('USSD directory execute failed'); return []; }
+    $rows = ussd_fetch_all($stmt);
+
+    $lines = [];
+    foreach ($rows as $row) {
+        // Newline separator, matching api.php: a crop name may one day contain a
+        // comma, and it will never contain a newline.
+        $crops = array_values(array_filter(array_map('trim', explode("\n", (string)$row['crops_concat']))));
+        if ($crops) {
+            $shown = array_slice($crops, 0, 2);
+            $crop_text = implode(',', $shown);
+            if (count($crops) > count($shown)) $crop_text .= '+' . (count($crops) - count($shown));
+        } else {
+            $crop_text = $labels['no_crops'];
+        }
+
+        // Spaces stripped from the number: legacy rows hold '+265 881 123 456'
+        // and every byte counts here. It stays dialable either way.
+        $phone = preg_replace('/\s+/', '', (string)$row['phone_number']);
+        if ($phone === '') $phone = $labels['no_number'];
+
+        $rating = ($row['avg_rating'] !== null && $row['avg_rating'] !== '')
+            ? ' ' . number_format((float)$row['avg_rating'], 1) . '*'
+            : '';
+
+        $lines[] = "{$row['name']}: {$phone}{$rating} | {$crop_text}";
+    }
+    return $lines;
+}
+
 function execute_query($mysqli, $query, $params = [], $types = '', $format_callback) {
     if (empty($params)) {
         $result = $mysqli->query($query);

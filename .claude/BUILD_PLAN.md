@@ -826,6 +826,103 @@ to back — registration 26, directory 30, navigation 20, language 46.
 
 ---
 
+## 2026-08-17 (later still) — USSD DIRECTORY BROUGHT BACK IN LINE WITH THE WEB
+
+User picked this off the suggestions list. Completion criterion 1 — both channels
+work — was the reason it was worth doing first.
+
+### A correction to my own finding, before anything else
+
+I told the user that `ussd/logic.php` used an INNER JOIN on the contact tables,
+so a seller with no contact row vanished and read as "no sellers in your
+district". **The vanishing seller is not reachable.** `sellers.contact_id` is
+`int NOT NULL` with an `ON DELETE RESTRICT` foreign key
+(`p601229_AgroBusiness_MW.sql:717`, `:1260`), so a listing without a contact row
+cannot be created — the database refuses. I found out by writing the fixture and
+watching MySQL reject it. I had reasoned from the shape of the query and never
+asked whether the row it worried about could exist.
+
+The reachable defect next door is worse, not better: `phone_number` is
+**nullable**, the old line was `"{name}: {phone_number}"`, and **every one of the
+14 rows in production has a NULL phone.** So the live page was a list of names
+followed by an empty space, with nothing to distinguish "no number on file" from
+a broken screen. That is what got fixed. The LEFT JOIN went in anyway to match
+`api.php`, and is labelled in the source as defensive rather than load-bearing.
+
+Standing rule 9, earned twice now in two days: **before fixing what a query
+would do to a row, check whether the schema permits that row.** A `NOT NULL` with
+an FK is a fact about reachability, and it is two lines away in the schema file.
+
+### What changed
+
+- `ussd_directory_lines()` in `ussd/helpers.php` — one query behind Find Sellers
+  and Find Buyers, replacing two inline copies. Shows crops (only possible now
+  that `admin_link_applicant_crops()` writes them), says `no number` /
+  `palibe nambala` when the phone is NULL, and computes the seller rating as a
+  **scalar subquery**: `ratings` and `seller_crops` joined into one row set fan
+  out against each other, and the next aggregate added over that product would
+  be wrong even though `AVG` happens to survive it.
+- `ussd_page_budget()` / `ussd_fit_lines()` — a CON page is 182 bytes and
+  Africa's Talking truncates past that without warning, which on this page means
+  half a phone number. The old code had no ceiling at all; adding crops would
+  have pushed a two-seller district over it. Whole lines are kept or dropped,
+  never cut, and the dropped count is shown. The budget is derived from the
+  actual back-menu suffix, because the Chichewa one is 11 bytes longer.
+- `ussd/menus.php` — a `directory` block with the three new strings in both
+  languages.
+
+### Two pre-existing USSD bugs found while trying to test it
+
+Neither was in the brief. Both had to be fixed to run the handler at all, which
+is itself the finding: **nobody had run this code since PHP 8.1.**
+
+1. **`ussd/config.php` ignored `DB_PORT`.** `config/database.php` reads it; the
+   USSD connector hardcoded the default. On any host that moves the port, the web
+   app works and the USSD channel is simply dead. It is why the handler returned
+   HTTP 500 here.
+2. **The graceful-failure path was unreachable.** PHP 8.1+ makes mysqli throw by
+   default, so `new mysqli(...)` raised before `$mysqli->connect_error` was ever
+   read. The retry loop and the `END System error. Please try again later.` reply
+   below it had been dead code for two major versions — the gateway got an
+   uncaught exception and a 500 body, and the caller's session broke instead of
+   ending politely. Now wrapped in `try`/`catch`.
+
+### Verified
+
+- `tests/ussd_directory_test.php` (new, needs a database) — **19/19**. Canary
+  tested three ways: raising the budget past 182 fails the ceiling assertions,
+  removing the NULL-phone fallback fails two, dropping crops from the line fails
+  three.
+- `tests/ussd_menu_parity.php` (new, static, wired into `run.sh`) — walks
+  `$menu_texts` and requires an `en` for every `ci` and vice versa, page numbers
+  included. 15 string nodes, 0 gaps; canary-tested by deleting one `ci` string.
+  This closes a real hole: `$menu_texts[...][$language]` on a missing key is an
+  empty string, not an error, so an English-only USSD string ships silently and
+  fails only on a feature phone where nobody can report it.
+- **The real handler, driven end to end.** POSTed the gateway's field set to
+  `ussd/index.php` and walked main menu → Find Sellers → Lilongwe in both
+  languages. English 160 bytes, Chichewa 175, both under 182, both showing crops
+  and the `+N more` note. Find Buyers likewise.
+- `tests/run.sh` 67/67. `promotion_test.php` 11/11. Every browser flow still
+  passes.
+
+One thing to know before testing USSD by hand: **the language is not in `text`.**
+`logic.php` overwrites `$stack[0]` from a session file, so `text=2*7*1` renders in
+English. `00` toggles, in the same `sessionId`. I spent a round concluding the
+Chichewa strings were not wired up before reading that.
+
+### Open
+
+- **No pagination on a result page.** "+N more" is honest but there is no way to
+  reach the remainder — about two listings per district once the back menu takes
+  its 51–62 bytes. `parse_navigation()` already paginates district menus with
+  `9. Next`; extending it to results is the fix, and it is not small.
+- **A live gateway test is still owed.** Everything above is a local POST. What it
+  cannot tell us is how a real operator handles a full-length page or a session
+  timeout.
+
+---
+
 ## 2026-08-17 (later) — CROP FILTER, CROPS ON CARDS, FARMER DIRECTORY
 
 User request, three parts: filter buyers and sellers by crop with a dropdown;

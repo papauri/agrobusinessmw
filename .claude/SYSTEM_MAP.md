@@ -30,7 +30,7 @@ This replaces the 2026-07-10 map, which described an app that no longer exists
 | Status lookup | `status.php` | `app.js` (status modal) | `check_application` | `onboarding_applications`, `districts` | both |
 | Privacy | `privacy.php` | — | none | — | web only |
 | Admin | `admin/index.php` | inline | none — direct SQL | `admin_users`, `admin_login_attempts`, `onboarding_applications`, `crowdsourced_prices`, `price_overrides`, `sellers`, `buyers`, contact tables | web (admin) |
-| USSD | `ussd/index.php` → `ussd/logic.php` | — | none — direct SQL | most of the above | USSD only |
+| USSD | `ussd/index.php` → `ussd/logic.php` (+ `ussd/helpers.php` for the directory) | — | none — direct SQL | most of the above | USSD only |
 | Community Q&A | *(no web page)* | — | none | `community_qa` — read at `ussd/logic.php:267` only | USSD only |
 
 ---
@@ -236,8 +236,17 @@ used to wrap it, so the destination of a dashboard tile depended on load order.
 - **Legacy contact numbers.** Rows written before canonicalisation may hold local
   formats. Nothing rewrites them: a bulk UPDATE that guesses a country code is
   exactly the mistake the app now refuses to make. Every read path tolerates both.
-- **USSD was not exercised.** No gateway available. Its code was not modified
-  this pass beyond nothing at all — `ussd/` is untouched. **[static]**
+- **USSD is now exercised locally, not against a gateway.** `ussd/index.php` is
+  driven by POSTing the gateway's own field set (`sessionId`, `phoneNumber`,
+  `serviceCode`, `text`) to a local server, in both languages. What that cannot
+  prove is how a real operator handles a 182-byte page or a session timeout, so
+  a live shortcode test is still owed. **[locally verified, gateway DEFERRED]**
+- **A USSD result page has no pagination.** `ussd_fit_lines()` shows what fits
+  and appends "+N more", but there is no way to reach the remainder: with the
+  back menu spending 51–62 of the 182 bytes, that is about two listings per
+  district. The `9. Next` machinery in `parse_navigation()` already paginates
+  *district* menus and is the obvious place to extend, but it replays a
+  navigation stack and is not a small change. Filed, not done.
 
 ---
 

@@ -43,7 +43,8 @@ php tests/phone_test.php;  report $? "config/phone.php contract"
 node tests/phone_test.mjs; report $? "assets/js/phone-normalizer.js parity"
 
 echo "== Bilingual parity =="
-python3 tests/i18n_parity.py; report $? "en/ci key parity across all translation tables"
+python3 tests/i18n_parity.py;      report $? "en/ci key parity across all translation tables"
+php tests/ussd_menu_parity.php;    report $? "en/ci parity across the USSD menus"
 
 echo "== Structure =="
 

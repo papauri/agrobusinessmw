@@ -272,32 +272,31 @@ function process_ussd(mysqli $mysqli, array $menu_texts, array $valid_options, a
                         break;
 
                     case '7': // Find Sellers
-                        $result = execute_query($mysqli,
-                            "SELECT s.name, scd.phone_number, AVG(r.rating_value) AS avg_rating
-                             FROM sellers s
-                             JOIN seller_contact_details scd ON s.contact_id = scd.id
-                             LEFT JOIN ratings r ON s.id = r.seller_id
-                             WHERE s.district_id = ?
-                             GROUP BY s.id, s.name, scd.phone_number",
-                            [$district_id], 'i', function($row) {
-                                $rating = $row['avg_rating'] ? number_format($row['avg_rating'], 1) . '*' : 'NR';
-                                return "{$row['name']}: {$row['phone_number']} ($rating)\n";
-                            });
-                        $response = $result
-                            ? "CON " . $result . $menu_texts['back_option'][$language]
-                            : $menu_texts['errors']['no_data'][$language];
-                        break;
-
                     case '8': // Find Buyers
-                        $result = execute_query($mysqli,
-                            "SELECT b.name, bcd.phone_number
-                             FROM buyers b
-                             JOIN buyer_contact_details bcd ON b.contact_id = bcd.id
-                             WHERE b.district_id = ?",
-                            [$district_id], 'i',
-                            fn($row) => "{$row['name']}: {$row['phone_number']}\n");
-                        $response = $result
-                            ? "CON " . $result . $menu_texts['back_option'][$language]
+                        // Both directions of the marketplace render identically:
+                        // name, number, crops. See ussd_directory_lines() in
+                        // helpers.php for why the query is not inline any more.
+                        $suffix = $menu_texts['back_option'][$language];
+                        $labels = [
+                            'no_number' => $menu_texts['directory']['no_number'][$language],
+                            'no_crops'  => $menu_texts['directory']['no_crops'][$language],
+                        ];
+                        $lines = ussd_directory_lines(
+                            $mysqli,
+                            $main === '7' ? 'seller' : 'buyer',
+                            $district_id,
+                            $labels
+                        );
+                        // A page that overflows 182 bytes is truncated by the
+                        // gateway mid-line, so the listing is fitted to what is
+                        // actually left after "CON " and the back menu.
+                        $result = ussd_fit_lines(
+                            $lines,
+                            ussd_page_budget($suffix),
+                            $menu_texts['directory']['more'][$language]
+                        );
+                        $response = $result !== ''
+                            ? "CON " . $result . $suffix
                             : $menu_texts['errors']['no_data'][$language];
                         break;
                 }

@@ -73,6 +73,16 @@ $menu_texts = [
         'ci' => "\n0. Kubwerera 🔙\n9. Menu Yaikulu\n00. Sinthani Chinenero 🌐"
     ],
 
+    // Find Sellers / Find Buyers result lines.
+    // Kept terse on purpose: a CON page is 182 bytes and the back menu above
+    // already spends 51 of them (62 in Chichewa), so every word here costs a
+    // listing the caller could otherwise have seen.
+    'directory' => [
+        'no_number' => ['en' => 'no number',        'ci' => 'palibe nambala'],
+        'no_crops'  => ['en' => 'crops not listed', 'ci' => 'mbewu sizinalembedwa'],
+        'more'      => ['en' => '+{n} more',        'ci' => '+{n} ena']
+    ],
+
     // Error messages
     'errors' => [
         'invalid' => [

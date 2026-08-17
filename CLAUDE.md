@@ -133,8 +133,10 @@ App → http://localhost:8080 · API health → http://localhost:8080/api.php?ac
 bash tests/run.sh              # lint + phone contract + i18n parity + structural gates
 php  tests/phone_test.php      # phone normalisation contract
 php  tests/promotion_test.php  # approval → directory promotion (NEEDS a database)
+php  tests/ussd_directory_test.php  # USSD Find Sellers/Buyers (NEEDS a database)
 node tests/phone_test.mjs      # browser/server parity
 python3 tests/i18n_parity.py   # en/ci key parity across all five tables
+php  tests/ussd_menu_parity.php     # en/ci parity across the USSD menus
 
 # Browser tests — need a running server and a database
 node tests/browser/registration_flow.mjs
@@ -278,6 +280,38 @@ Things the schema will tell you that the code does not:
 - Handler replies `CON <menu>` to continue or `END <message>` to close
 - `ussd/` talks to MySQL directly; keep it in sync with schema changes
 - Weather uses `ussd/config.php`'s `$district_coords` — **not** `app.js`'s copy
+- **Language lives in a session file, not in `text`.** `$stack[0]` is always
+  overwritten from the persisted preference, so sending `text=2*…` does not
+  select Chichewa — `00` toggles it, and the toggle must be in the same
+  `sessionId`. Worth knowing before you conclude the translation is broken.
+
+### A CON page is 182 bytes
+
+Africa's Talking truncates anything longer, mid-word and without warning — which
+on a directory page means half a phone number. `"CON "` and the trailing back
+menu are spent before a single line of content, and the Chichewa back menu is 11
+bytes longer than the English one.
+
+Anything that renders a variable number of rows must go through
+`ussd_page_budget()` and `ussd_fit_lines()` in `ussd/helpers.php`: the budget is
+derived from the actual suffix, whole lines are kept or dropped (never cut), and
+the dropped count is shown. `tests/ussd_directory_test.php` asserts the ceiling
+in both languages.
+
+### The directory over USSD
+
+`ussd_directory_lines()` is the single query behind Find Sellers and Find Buyers.
+It must stay in step with `api.php`'s `sellers`/`buyers`:
+
+- **LEFT JOIN the contact table**, matching `api.php`. Defensive rather than
+  load-bearing — `sellers.contact_id` is `int NOT NULL` with an
+  `ON DELETE RESTRICT` FK, so a listing with no contact row cannot exist.
+- **`phone_number` is nullable and NULL on every production row.** Render the
+  `directory.no_number` string, never an empty gap after the colon.
+- **The rating is a scalar subquery, not a joined `AVG`.** `ratings` and
+  `seller_crops` in one row set fan out against each other; the next aggregate
+  added over that product would be wrong.
+- Crops split on a newline, same as `api.php`, for the same reason.
 
 ## Weather
 

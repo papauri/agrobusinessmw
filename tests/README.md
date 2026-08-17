@@ -85,13 +85,25 @@ UPDATE onboarding_applications SET status='approved'
  WHERE user_type='farmer' AND application_ref='AGR-...';
 ```
 
-`promotion_test.php` is the only PHP test that needs a database. It slices the
-promotion functions out of `admin/index.php`, runs them against real tables, and
-deletes its own fixtures. It is deliberately not in `run.sh`, which is
-static-only.
+`promotion_test.php` and `ussd_directory_test.php` are the PHP tests that need a
+database. Both seed their own fixtures and delete them afterwards, and both are
+deliberately outside `run.sh`, which is static-only.
 
 ```bash
-php tests/promotion_test.php
+php tests/promotion_test.php        # approval → seller/buyer + crop links
+php tests/ussd_directory_test.php   # USSD Find Sellers / Find Buyers
+```
+
+To drive the USSD handler by hand, POST the gateway's own fields. Note that the
+language is **not** taken from `text` — it lives in a session file and `00`
+toggles it, so Chichewa needs the toggle inside the same `sessionId`:
+
+```bash
+S=mysession
+curl -s -X POST localhost:8080/ussd/ -d sessionId=$S -d phoneNumber=+265888123456 \
+     -d 'serviceCode=*384*1#' -d 'text=1*7*1'        # English, Find Sellers, Lilongwe
+curl -s -X POST localhost:8080/ussd/ -d sessionId=$S -d phoneNumber=+265888123456 \
+     -d 'serviceCode=*384*1#' -d 'text=00*1*7*1'     # same page in Chichewa
 ```
 
 `chichewa_overflow.mjs` is separate from `page_health.mjs` because Chichewa

@@ -21,18 +21,35 @@ function get_db_connection($max_retries = 2) {
     $user = $_ENV['DB_USER'] ?? '';
     $pass = $_ENV['DB_PASS'] ?? '';
     $db   = $_ENV['DB_NAME'] ?? '';
+    // DB_PORT was read from .env by config/database.php and ignored here, so
+    // this connector could only ever reach MySQL on 3306. On a host that moves
+    // the port, the web app worked and the USSD channel was simply dead.
+    $port = (int)($_ENV['DB_PORT'] ?? 3306) ?: 3306;
 
     for ($attempt = 1; $attempt <= $max_retries; $attempt++) {
-        $mysqli = new mysqli($host, $user, $pass, $db);
-        if (!$mysqli->connect_error) {
-            $mysqli->set_charset('utf8mb4');
-            return $mysqli;
+        // PHP 8.1+ makes mysqli throw by default (mysqli_report(MYSQLI_REPORT_
+        // ERROR|MYSQLI_REPORT_STRICT)). The constructor therefore raises before
+        // `connect_error` is ever read, which made the retry loop and the
+        // graceful "END System error" below unreachable: the gateway got an
+        // uncaught exception and an HTTP 500 instead of a valid USSD reply, and
+        // the caller's session broke rather than ending politely.
+        try {
+            $mysqli = new mysqli($host, $user, $pass, $db, $port);
+            if (!$mysqli->connect_error) {
+                $mysqli->set_charset('utf8mb4');
+                return $mysqli;
+            }
+            $why = $mysqli->connect_error;
+        } catch (mysqli_sql_exception $e) {
+            $why = $e->getMessage();
         }
-        error_log("USSD DB connection failed (attempt $attempt): " . $mysqli->connect_error);
+        error_log("USSD DB connection failed (attempt $attempt): " . $why);
         if ($attempt < $max_retries) sleep(1);
     }
 
     error_log("USSD: all DB connection attempts failed");
+    // Always a valid USSD reply. The gateway shows the caller whatever it gets;
+    // an error page is not something a feature phone can render.
     echo "END System error. Please try again later.";
     ob_end_flush();
     exit;
