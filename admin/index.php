@@ -245,6 +245,13 @@ function admin_promote_applicant(mysqli $db, array $app): string
 
     $name    = (string)($app['full_name'] ?? '');
     $phone   = $app['phone_number'] ?? null;
+    // The applicant gave us a WhatsApp number at registration and the contact
+    // tables have a column for it. Before this it was collected, stored on the
+    // application, and then silently dropped on approval — so an approved seller
+    // appeared in the directory with no WhatsApp even though they had supplied one.
+    // NULL rather than '' when absent: the column carries a UNIQUE key, and
+    // several empty strings would collide while several NULLs do not.
+    $whatsapp = ($app['whatsapp_number'] ?? '') !== '' ? $app['whatsapp_number'] : null;
     $email   = $app['email'] ?? null;
     $address = $app['village'] ?? '';   // village is the applicant's address line
 
@@ -252,11 +259,11 @@ function admin_promote_applicant(mysqli $db, array $app): string
     // into a statement — not even the table name — so there is no path from any
     // applicant value into the SQL text.
     if ($userType === 'seller') {
-        $cStmt = $db->prepare("INSERT INTO seller_contact_details (phone_number, email, address) VALUES (?,?,?)");
+        $cStmt = $db->prepare("INSERT INTO seller_contact_details (phone_number, whatsapp_number, email, address) VALUES (?,?,?,?)");
         if (!$cStmt) {
             throw new RuntimeException('the seller contact insert could not be prepared');
         }
-        $cStmt->bind_param('sss', $phone, $email, $address);
+        $cStmt->bind_param('ssss', $phone, $whatsapp, $email, $address);
         $cOk = $cStmt->execute();
         $cStmt->close();
         if (!$cOk) {
@@ -280,11 +287,11 @@ function admin_promote_applicant(mysqli $db, array $app): string
         return 'sellers';
     }
 
-    $cStmt = $db->prepare("INSERT INTO buyer_contact_details (phone_number, email, address) VALUES (?,?,?)");
+    $cStmt = $db->prepare("INSERT INTO buyer_contact_details (phone_number, whatsapp_number, email, address) VALUES (?,?,?,?)");
     if (!$cStmt) {
         throw new RuntimeException('the buyer contact insert could not be prepared');
     }
-    $cStmt->bind_param('sss', $phone, $email, $address);
+    $cStmt->bind_param('ssss', $phone, $whatsapp, $email, $address);
     $cOk = $cStmt->execute();
     $cStmt->close();
     if (!$cOk) {
@@ -340,7 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
             // promotion needs. FOR UPDATE locks the row so two concurrent approvals
             // of the same id serialise here instead of both seeing 'pending'.
             $s2 = $db->prepare(
-                "SELECT full_name, email, application_ref, user_type, phone_number, district_id, village, status
+                "SELECT full_name, email, application_ref, user_type, phone_number, whatsapp_number, district_id, village, status
                  FROM onboarding_applications WHERE id=? FOR UPDATE"
             );
             if (!$s2) {
@@ -352,8 +359,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
             }
             // No get_result(): mysqlnd is not guaranteed on the host. Bind + fetch
             // instead. The bind_result list below matches the SELECT list above
-            // one-for-one, in order — 8 columns, 8 variables.
-            $s2->bind_result($fullName, $email, $appRef, $userType, $phoneNumber, $districtId, $village, $currentStatus);
+            // one-for-one, in order — 9 columns, 9 variables. If you add a column
+            // to the SELECT you MUST add its variable here in the same position;
+            // bind_result is positional and silently shifts every later value.
+            $s2->bind_result($fullName, $email, $appRef, $userType, $phoneNumber, $whatsappNumber, $districtId, $village, $currentStatus);
             $app = $s2->fetch()
                 ? [
                     'full_name'       => $fullName,
@@ -361,6 +370,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
                     'application_ref' => $appRef,
                     'user_type'       => $userType,
                     'phone_number'    => $phoneNumber,
+                    'whatsapp_number' => $whatsappNumber,
                     'district_id'     => $districtId,
                     'village'         => $village,
                     'status'          => $currentStatus,

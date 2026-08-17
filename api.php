@@ -351,7 +351,7 @@ try {
             // interpolating table names. Slightly longer, impossible to misread.
             if ($isSellers) {
                 $query = "SELECT s.id, s.name, s.district_id, d.name AS district_name,
-                                 scd.phone_number, scd.email, scd.address,
+                                 scd.phone_number, scd.whatsapp_number, scd.email, scd.address,
                                  GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS crops_display
                           FROM sellers s
                           JOIN districts d ON s.district_id = d.id
@@ -361,7 +361,7 @@ try {
                           WHERE 1 = 1";
             } else {
                 $query = "SELECT b.id, b.name, b.district_id, d.name AS district_name,
-                                 bcd.phone_number, bcd.email, bcd.address,
+                                 bcd.phone_number, bcd.whatsapp_number, bcd.email, bcd.address,
                                  GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS crops_display
                           FROM buyers b
                           JOIN districts d ON b.district_id = d.id
@@ -388,8 +388,8 @@ try {
             // Every selected non-aggregate column is grouped, so this is correct
             // under ONLY_FULL_GROUP_BY as well as without it.
             $query .= $isSellers
-                ? " GROUP BY s.id, s.name, s.district_id, d.name, scd.phone_number, scd.email, scd.address ORDER BY s.name ASC"
-                : " GROUP BY b.id, b.name, b.district_id, d.name, bcd.phone_number, bcd.email, bcd.address ORDER BY b.name ASC";
+                ? " GROUP BY s.id, s.name, s.district_id, d.name, scd.phone_number, scd.whatsapp_number, scd.email, scd.address ORDER BY s.name ASC"
+                : " GROUP BY b.id, b.name, b.district_id, d.name, bcd.phone_number, bcd.whatsapp_number, bcd.email, bcd.address ORDER BY b.name ASC";
 
             $stmt = $mysqli->prepare($query);
             if (!$stmt) throw new Exception('Directory query could not be prepared.');

@@ -140,6 +140,7 @@ node tests/browser/registration_flow.mjs
 node tests/browser/directory_flow.mjs
 node tests/browser/navigation_flow.mjs
 node tests/browser/language_flow.mjs    # Chichewa end to end
+node tests/browser/whatsapp_flow.mjs    # WhatsApp contact wiring
 node tests/browser/page_health.mjs      # every page, 320→1280px
 node tests/browser/chichewa_overflow.mjs # Chichewa at 320/360/390px
 ```
@@ -219,8 +220,10 @@ the old file see `migrations/2026-08-16-schema-of-record.sql`.
 Things the schema will tell you that the code does not:
 
 - `seller_contact_details` and `buyer_contact_details` each carry a
-  `whatsapp_number` column that **nothing reads yet** — the directory derives its
-  WhatsApp link from `phone_number`.
+  `whatsapp_number` column, wired end to end: `admin/index.php` copies it from
+  the application on approval, `api.php` returns it on `sellers`/`buyers`, and
+  the directory prefers it, falling back to `phone_number` when it is absent.
+  Both columns are UNIQUE, so store NULL rather than `''` when there is none.
 - `price_markets` / `price_areas` are curated market and area lists with **no
   reader in this repository**. They are `utf8mb4_unicode_ci` while every other
   table is `utf8mb4_0900_ai_ci`; comparing a string column across that boundary

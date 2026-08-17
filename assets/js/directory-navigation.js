@@ -95,9 +95,18 @@
         return detailModal;
     }
 
-    // wa.me wants the number with no plus and no separators.
-    function whatsappLink(phone) {
-        const digits = String(phone || '').replace(/[^0-9]/g, '');
+    /* wa.me wants the number with no plus and no separators.
+     *
+     * Prefer the contact's dedicated whatsapp_number and fall back to their
+     * phone. The contact tables have carried a whatsapp_number column all along
+     * and nothing read it, so every WhatsApp button pointed at the landline or
+     * office number whether or not that number was on WhatsApp. */
+    function whatsappNumber(row) {
+        return row.whatsapp_number || row.phone_number || '';
+    }
+
+    function whatsappLink(number) {
+        const digits = String(number || '').replace(/[^0-9]/g, '');
         return digits.length >= 8 ? 'https://wa.me/' + digits : '';
     }
 
@@ -109,7 +118,10 @@
         const title = document.getElementById('directory-detail-title');
         const body = document.getElementById('directory-detail-body');
         const crops = String(row.crops_display || '').split(',').map(s => s.trim()).filter(Boolean);
-        const wa = whatsappLink(row.phone_number);
+        const waNumber = whatsappNumber(row);
+        const wa = whatsappLink(waNumber);
+        // Only worth showing separately when it differs from the phone number.
+        const waIsDistinct = Boolean(row.whatsapp_number) && row.whatsapp_number !== row.phone_number;
         title.textContent = row.name || t(type === 'seller' ? 'seller' : 'buyer');
 
         const actions = [];
@@ -121,8 +133,9 @@
         body.innerHTML = '<div class="directory-contact-hero"><div class="directory-avatar" aria-hidden="true">' + (type === 'seller' ? '🌾' : '🏢') + '</div><div><span class="directory-role">' + esc(t(type === 'seller' ? 'seller' : 'buyer')) + '</span><h3>' + esc(row.name) + '</h3><p>' + esc(row.district_name || '') + (row.address ? ' · ' + esc(row.address) : '') + '</p></div></div>'
             + (crops.length ? '<div class="directory-detail-section"><span class="directory-label">' + esc(t('crops')) + '</span><div class="directory-crop-list">' + crops.map(c => '<span>' + esc(c) + '</span>').join('') + '</div></div>' : '')
             + (row.phone_number ? '<div class="directory-detail-section"><span class="directory-label">' + esc(t('phone')) + '</span><p class="directory-contact-value">' + esc(row.phone_number) + '</p></div>' : '')
+            + (waIsDistinct ? '<div class="directory-detail-section"><span class="directory-label">' + esc(t('whatsapp')) + '</span><p class="directory-contact-value">' + esc(row.whatsapp_number) + '</p></div>' : '')
             + (row.email ? '<div class="directory-detail-section"><span class="directory-label">' + esc(t('email')) + '</span><p class="directory-contact-value">' + esc(row.email) + '</p></div>' : '')
-            + (!row.phone_number && !row.email ? '<p class="directory-no-contact">' + esc(t('noContact')) + '</p>' : '')
+            + (!row.phone_number && !row.whatsapp_number && !row.email ? '<p class="directory-no-contact">' + esc(t('noContact')) + '</p>' : '')
             + '<div class="directory-detail-actions">' + actions.join('') + '</div>';
 
         const shareBtn = document.getElementById('directory-share-contact');
@@ -179,7 +192,7 @@
             const term = search.value.trim().toLowerCase();
             const selected = select.value;
             const filtered = rows.filter(row => {
-                const hay = [row.name,row.district_name,row.phone_number,row.email,row.address,row.crops_display].join(' ').toLowerCase();
+                const hay = [row.name,row.district_name,row.phone_number,row.whatsapp_number,row.email,row.address,row.crops_display].join(' ').toLowerCase();
                 return (!term || hay.includes(term)) && (!selected || String(row.district_id) === selected);
             });
             count.textContent = t(isSeller ? 'showingSellers' : 'showingBuyers', { n: filtered.length });

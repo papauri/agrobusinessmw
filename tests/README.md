@@ -35,6 +35,7 @@ node tests/browser/registration_flow.mjs
 node tests/browser/directory_flow.mjs
 node tests/browser/navigation_flow.mjs
 node tests/browser/language_flow.mjs
+node tests/browser/whatsapp_flow.mjs
 node tests/browser/page_health.mjs
 node tests/browser/chichewa_overflow.mjs
 ```
@@ -64,6 +65,15 @@ sed 's/utf8mb4_0900_ai_ci/utf8mb4_general_ci/g' p601229_AgroBusiness_MW.sql \
 
 `registration_flow.mjs` and `language_flow.mjs` generate a fresh phone number per
 run, so both are repeatable against a database that already holds earlier runs.
+
+`whatsapp_flow.mjs` needs two fixture rows — it expects `seller_contact_details`
+id 1 and 2 to carry distinct WhatsApp numbers so both the dedicated-number and
+the fall-back-to-phone paths are exercised:
+
+```sql
+UPDATE seller_contact_details SET whatsapp_number='+265991000001' WHERE id=1;
+UPDATE seller_contact_details SET whatsapp_number='+265991000002' WHERE id=2;
+```
 
 `chichewa_overflow.mjs` is separate from `page_health.mjs` because Chichewa
 strings are longer: a layout can pass in English and overflow once translated.
