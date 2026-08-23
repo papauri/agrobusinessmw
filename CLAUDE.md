@@ -307,7 +307,22 @@ Things the schema will tell you that the code does not:
   fetched** — see ADMARC below. `district_id` 0 means national, the same
   convention `price_overrides` uses, and like that table it carries no FK to
   `districts`.
-- `price_review_audit` is read by `admin/price-audit.php`.
+- `price_review_audit` is read by `admin/price-audit.php` and **written only by
+  two triggers** on `crowdsourced_prices` (`trg_price_audit_after_insert` /
+  `..._after_update`). No PHP inserts into it. A database restored without those
+  triggers keeps the table and the page, records nothing, and raises no error.
+- **7 CHECK constraints** enforce E.164 on the contact/application phone columns
+  and positivity on the crowdsourced price columns. Both they and the triggers
+  were missing from the schema of record until 2026-08-23 — the 2026-08-16
+  reconciliation compared columns, indexes, foreign keys and engines, and never
+  looked at constraints or triggers. If you re-verify the schema, compare those
+  too.
+- `onboarding_applications` constrains `whatsapp_number` but **not**
+  `phone_number`, while the contact tables constrain both. Promotion copies the
+  application's phone into a CHECKed column, so an unnormalised number stored
+  there fails at approval rather than at registration. Both channels run
+  `agro_normalize_phone()` first, so this is latent — do not add a caller that
+  skips it.
 - `crowdsourced_prices.area_id` exists but is NULL on every production row.
 - Contact tables enforce UNIQUE on `phone_number` and on `whatsapp_number`: one
   contact row per number.

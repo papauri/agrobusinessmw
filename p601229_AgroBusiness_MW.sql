@@ -1307,6 +1307,149 @@ ALTER TABLE `seller_crops`
   ADD CONSTRAINT `fk_seller_crops_crop` FOREIGN KEY (`crop_id`) REFERENCES `crops` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_seller_crops_seller` FOREIGN KEY (`seller_id`) REFERENCES `sellers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
+--
+-- CHECK constraints
+--
+-- These exist in production but were absent from this file until 2026-08-23.
+-- The 2026-08-16 reconciliation compared columns, indexes, foreign keys and
+-- engines — it did not compare CHECK constraints or triggers, so this drift
+-- went unnoticed. A database restored from the old file accepted phone numbers
+-- in any format at all, which is the one thing config/phone.php exists to
+-- prevent: the column is the last line of defence when a caller skips
+-- agro_normalize_phone().
+--
+-- The pattern is E.164: a leading +, then 8 to 15 digits, the first non-zero.
+-- NULL stays legal because a directory contact may have no number on file.
+--
+
+ALTER TABLE `buyer_contact_details`
+  ADD CONSTRAINT `chk_buyer_phone_international`
+    CHECK ((`phone_number` IS NULL) OR REGEXP_LIKE(`phone_number`, '^\\+[1-9][0-9]{7,14}$')),
+  ADD CONSTRAINT `chk_buyer_whatsapp_international`
+    CHECK ((`whatsapp_number` IS NULL) OR REGEXP_LIKE(`whatsapp_number`, '^\\+[1-9][0-9]{7,14}$'));
+
+ALTER TABLE `seller_contact_details`
+  ADD CONSTRAINT `chk_seller_phone_international`
+    CHECK ((`phone_number` IS NULL) OR REGEXP_LIKE(`phone_number`, '^\\+[1-9][0-9]{7,14}$')),
+  ADD CONSTRAINT `chk_seller_whatsapp_international`
+    CHECK ((`whatsapp_number` IS NULL) OR REGEXP_LIKE(`whatsapp_number`, '^\\+[1-9][0-9]{7,14}$'));
+
+--
+-- NOTE: onboarding_applications constrains whatsapp_number but NOT
+-- phone_number. That asymmetry is production's, reproduced here deliberately
+-- rather than "corrected" — adding the missing one would reject existing rows
+-- on some deployments. register.php normalises before insert, so the gap is
+-- latent rather than active, but a caller that skips normalisation can store a
+-- phone here that later fails the contact-table constraint on promotion.
+--
+ALTER TABLE `onboarding_applications`
+  ADD CONSTRAINT `chk_onboarding_whatsapp_international`
+    CHECK ((`whatsapp_number` IS NULL) OR REGEXP_LIKE(`whatsapp_number`, '^\\+[1-9][0-9]{7,14}$'));
+
+ALTER TABLE `crowdsourced_prices`
+  ADD CONSTRAINT `chk_crowdsourced_price_per_kg_positive`
+    CHECK ((`price_per_kg` IS NULL) OR (`price_per_kg` > 0)),
+  ADD CONSTRAINT `chk_crowdsourced_price_per_bag_positive`
+    CHECK ((`price_per_bag` IS NULL) OR (`price_per_bag` > 0));
+
+--
+-- Triggers — the price review audit trail
+--
+-- Also absent from this file until 2026-08-23, and the more damaging of the two
+-- omissions: price_review_audit is written ONLY by these triggers. Nothing in
+-- PHP inserts into it. A database restored without them keeps the table and the
+-- admin/price-audit.php page, and simply records nothing — the page stays empty
+-- and no error is ever raised.
+--
+-- DEFINER is deliberately omitted so a restore does not depend on the
+-- p601229@localhost account existing on the target server.
+--
+
+DELIMITER $$
+
+CREATE TRIGGER `trg_price_audit_after_insert` AFTER INSERT ON `crowdsourced_prices` FOR EACH ROW
+BEGIN
+    INSERT INTO price_review_audit (
+        price_report_id, event_type,
+        crop_id, district_id, market_name,
+        price_per_kg, price_per_bag, unit,
+        submitted_by, channel,
+        verified, status, is_member,
+        flag_reason,
+        reviewed_by, reviewed_at,
+        new_status, new_price_per_kg, new_price_per_bag, new_market_name, new_flag_reason
+    )
+    VALUES (
+        NEW.id, 'submitted',
+        NEW.crop_id, NEW.district_id, NEW.market_name,
+        NEW.price_per_kg, NEW.price_per_bag, NEW.unit,
+        NEW.submitted_by, NEW.channel,
+        NEW.verified, NEW.status, NEW.is_member,
+        NEW.flag_reason,
+        NEW.reviewed_by, NEW.reviewed_at,
+        NEW.status, NEW.price_per_kg, NEW.price_per_bag, NEW.market_name, NEW.flag_reason
+    );
+END$$
+
+CREATE TRIGGER `trg_price_audit_after_update` AFTER UPDATE ON `crowdsourced_prices` FOR EACH ROW
+BEGIN
+    IF
+        NOT (OLD.status        <=> NEW.status)
+        OR NOT (OLD.price_per_kg  <=> NEW.price_per_kg)
+        OR NOT (OLD.price_per_bag <=> NEW.price_per_bag)
+        OR NOT (OLD.market_name   <=> NEW.market_name)
+        OR NOT (OLD.flag_reason   <=> NEW.flag_reason)
+        OR NOT (OLD.reviewed_by   <=> NEW.reviewed_by)
+        OR NOT (OLD.reviewed_at   <=> NEW.reviewed_at)
+        OR NOT (OLD.verified      <=> NEW.verified)
+    THEN
+        INSERT INTO price_review_audit (
+            price_report_id, event_type,
+            crop_id, district_id, market_name,
+            price_per_kg, price_per_bag, unit,
+            submitted_by, channel,
+            verified, status, is_member,
+            flag_reason,
+            reviewed_by, reviewed_at,
+            old_status, new_status,
+            old_price_per_kg, new_price_per_kg,
+            old_price_per_bag, new_price_per_bag,
+            old_market_name, new_market_name,
+            old_flag_reason, new_flag_reason
+        )
+        VALUES (
+            NEW.id,
+            CASE
+                WHEN NOT (OLD.status <=> NEW.status) AND NEW.status = 'approved'                THEN 'approved'
+                WHEN NOT (OLD.status <=> NEW.status) AND NEW.status IN ('rejected', 'denied')   THEN 'rejected'
+                WHEN NOT (OLD.status <=> NEW.status) AND NEW.status = 'flagged'                 THEN 'flagged'
+                WHEN NOT (OLD.status <=> NEW.status)                                            THEN 'status_changed'
+                WHEN NOT (OLD.price_per_kg <=> NEW.price_per_kg)
+                     OR NOT (OLD.price_per_bag <=> NEW.price_per_bag)                           THEN 'price_changed'
+                WHEN NOT (OLD.market_name <=> NEW.market_name)                                  THEN 'market_changed'
+                WHEN NOT (OLD.flag_reason <=> NEW.flag_reason)                                  THEN 'reason_changed'
+                WHEN NOT (OLD.reviewed_by <=> NEW.reviewed_by)
+                     OR NOT (OLD.reviewed_at <=> NEW.reviewed_at)                               THEN 'reviewed'
+                WHEN NOT (OLD.verified <=> NEW.verified)                                        THEN 'verification_changed'
+                ELSE 'updated'
+            END,
+            NEW.crop_id, NEW.district_id, NEW.market_name,
+            NEW.price_per_kg, NEW.price_per_bag, NEW.unit,
+            NEW.submitted_by, NEW.channel,
+            NEW.verified, NEW.status, NEW.is_member,
+            NEW.flag_reason,
+            NEW.reviewed_by, NEW.reviewed_at,
+            OLD.status, NEW.status,
+            OLD.price_per_kg, NEW.price_per_kg,
+            OLD.price_per_bag, NEW.price_per_bag,
+            OLD.market_name, NEW.market_name,
+            OLD.flag_reason, NEW.flag_reason
+        );
+    END IF;
+END$$
+
+DELIMITER ;
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

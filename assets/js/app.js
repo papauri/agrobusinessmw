@@ -2478,11 +2478,22 @@ class AgroBusinessRevolution {
 
             Object.values(combinedMap).forEach(rec => {
                 const a = resolveAdmarc(rec.crop_id, rec.district);
-                if (!a) return;
-                rec.admarc_price_num = Number(a.price) || null;
-                rec.admarc_bag_num = a.price_per_bag != null ? Number(a.price_per_bag) : null;
-                rec.admarc_effective = a.effective_from || null;
-                rec.admarc_source_note = a.source_note || null;
+                if (a) {
+                    rec.admarc_price_num = Number(a.price) || null;
+                    rec.admarc_bag_num = a.price_per_bag != null ? Number(a.price_per_bag) : null;
+                    rec.admarc_effective = a.effective_from || null;
+                    rec.admarc_source_note = a.source_note || null;
+                }
+                // The source-labelling pass above ran before ADMARC was resolved, so
+                // a record that exists ONLY because ADMARC prices its crop still
+                // carries getRec's defaults — it would claim to be a community
+                // report with no reports behind it, and would answer the
+                // "Community only" filter. Label it for what it actually is.
+                if (!rec._hasFews && !rec._hasCommunity) {
+                    rec.source = 'admarc';
+                    rec.sourceLabel = 'ADMARC Official';
+                    rec.type = 'Official price';
+                }
             });
 
             const rows = Object.values(combinedMap).sort((a, b) => (a.crop_name || '').localeCompare(b.crop_name || '') || (b._ts || 0) - (a._ts || 0));

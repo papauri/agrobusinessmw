@@ -100,6 +100,29 @@ function ussd_bag_price($per_kg): string {
     return 'MWK' . number_format((float)$per_kg * USSD_BAG_KG);
 }
 
+/**
+ * Format two prices as a low-high range.
+ *
+ * crop_prices holds min_price and market_price as separate columns and nothing
+ * enforces that min <= market. Production currently has Soybeans at min=900,
+ * market=95 — almost certainly 950 with a digit dropped — and rendering the
+ * columns in fixed order printed "MWK900.00-95.00/kg" on the handset: a range
+ * running backwards, which reads as broken rather than as a data error.
+ *
+ * Ordering here does not repair the number, and is not meant to hide it. It
+ * keeps ONE bad row from making the whole price page look untrustworthy on the
+ * channel with the least room to explain itself.
+ *
+ * @param callable|null $fmt applied to each side (e.g. ussd_bag_price)
+ */
+function ussd_price_range($a, $b, ?callable $fmt = null): string {
+    $lo = min((float)$a, (float)$b);
+    $hi = max((float)$a, (float)$b);
+    if ($fmt) return $fmt($lo) . '-' . $fmt($hi);
+    // Match the column's own formatting rather than reformatting the number.
+    return ((float)$a <= (float)$b) ? "$a-$b" : "$b-$a";
+}
+
 // mysqlnd-free fetch: works without get_result() / mysqlnd driver
 function ussd_fetch_all(mysqli_stmt $stmt): array {
     $meta = $stmt->result_metadata();
@@ -313,9 +336,9 @@ function get_prices_by_district(mysqli $mysqli, int $district_id, string $lang):
     if (!$r) return '';
     $lines = [];
     while ($row = $r->fetch_assoc()) {
-        $line = "{$row['name']}: MWK{$row['min_price']}-{$row['market_price']}/{$row['unit']}";
+        $line = "{$row['name']}: MWK" . ussd_price_range($row['min_price'], $row['market_price']) . "/{$row['unit']}";
         if (ussd_is_kg($row['unit'])) {
-            $line .= "\n  50kg bag: " . ussd_bag_price($row['min_price']) . '-' . ussd_bag_price($row['market_price']);
+            $line .= "\n  50kg bag: " . ussd_price_range($row['min_price'], $row['market_price'], 'ussd_bag_price');
         }
         $lines[] = $line;
     }
@@ -359,7 +382,7 @@ function get_prices_by_crop_district(mysqli $mysqli, int $crop_id, int $district
         if ($rows2) {
             $r = $rows2[0];
             $out = "{$r['name']} (National ref):\nMin: MWK{$r['min_price']}/{$r['unit']}\nMkt: MWK{$r['market_price']}/{$r['unit']}";
-            if (ussd_is_kg($r['unit'])) $out .= "\n50kg bag: " . ussd_bag_price($r['min_price']) . '-' . ussd_bag_price($r['market_price']);
+            if (ussd_is_kg($r['unit'])) $out .= "\n50kg bag: " . ussd_price_range($r['min_price'], $r['market_price'], 'ussd_bag_price');
             return $out;
         }
     }
