@@ -2345,11 +2345,13 @@ class AgroBusinessRevolution {
 
             let fews = response.fews || [];
             let community = response.community || [];
+            let admarc = response.admarc || [];
 
             if (specificCrop) {
                 const lc = specificCrop.toLowerCase();
                 fews = fews.filter(r => (r.crop_name || '').toLowerCase().includes(lc));
                 community = community.filter(r => (r.crop_name || '').toLowerCase().includes(lc));
+                admarc = admarc.filter(r => (r.crop_name || '').toLowerCase().includes(lc));
             }
 
             const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({
@@ -2389,6 +2391,10 @@ class AgroBusinessRevolution {
                         market: '—',
                         fewsPrice: '—',
                         fews_price_num: null,
+                        admarc_price_num: null,
+                        admarc_bag_num: null,
+                        admarc_effective: null,
+                        admarc_source_note: null,
                         communityPrice: '—',
                         community_min_num: null,
                         community_avg_num: null,
@@ -2449,6 +2455,36 @@ class AgroBusinessRevolution {
                 }
             });
 
+            // ADMARC official prices. Unlike the other two sources these do NOT get
+            // rows of their own: a national ADMARC price covers every district, so
+            // emitting it as a row would duplicate each crop. It is resolved onto
+            // the records that already exist, district-specific beating national —
+            // the same precedence api.php applies.
+            const admarcNational = {};
+            const admarcByDistrict = {};
+            admarc.forEach(r => {
+                if (r.national) admarcNational[r.crop_id] = r;
+                else admarcByDistrict[`${r.crop_id}|${(r.district_name || '').toLowerCase()}`] = r;
+            });
+            const resolveAdmarc = (cropId, districtName) =>
+                admarcByDistrict[`${cropId}|${(districtName || '').toLowerCase()}`] || admarcNational[cropId] || null;
+
+            // A crop ADMARC prices but nobody has reported on would otherwise be
+            // invisible, so give it a record of its own.
+            admarc.forEach(r => {
+                const already = Object.values(combinedMap).some(rec => rec.crop_id === r.crop_id);
+                if (!already) getRec(r.crop_id, r.crop_name, r.district_name || '—');
+            });
+
+            Object.values(combinedMap).forEach(rec => {
+                const a = resolveAdmarc(rec.crop_id, rec.district);
+                if (!a) return;
+                rec.admarc_price_num = Number(a.price) || null;
+                rec.admarc_bag_num = a.price_per_bag != null ? Number(a.price_per_bag) : null;
+                rec.admarc_effective = a.effective_from || null;
+                rec.admarc_source_note = a.source_note || null;
+            });
+
             const rows = Object.values(combinedMap).sort((a, b) => (a.crop_name || '').localeCompare(b.crop_name || '') || (b._ts || 0) - (a._ts || 0));
 
             const cropSeen = new Set();
@@ -2469,11 +2505,18 @@ class AgroBusinessRevolution {
             const perKg = '<small class="price-unit">per kg</small>';
 
             const priceRows = rows.map((r, i) => {
-                const searchText = [r.sourceLabel, r.crop_name, r.district, r.market, r.type, r.fewsPrice || '', r.communityPrice || '', r.reports, r.unit].join(' ').toLowerCase();
+                const searchText = [r.sourceLabel, r.crop_name, r.district, r.market, r.type, r.fewsPrice || '', r.communityPrice || '', r.reports, r.unit, r.admarc_price_num ? 'admarc' : ''].join(' ').toLowerCase();
 
                 const fewsNum = r.fews_price_num ?? null;
                 const fewsPer50Display = fewsNum ? `${BAG_KG}kg bag: MK ${Math.round(fewsNum * BAG_KG).toLocaleString()}` : '';
                 const fewsDisplay = fewsNum ? fmt(fewsNum) : (r.fewsPrice || '—');
+
+                const admarcNum = r.admarc_price_num ?? null;
+                const admarcBag = r.admarc_bag_num ?? (admarcNum ? Math.round(admarcNum * BAG_KG) : null);
+                const admarcBagDisplay = admarcBag ? `${BAG_KG}kg bag: MK ${Math.round(admarcBag).toLocaleString()}` : '';
+                const admarcTitle = admarcNum
+                    ? `Official ADMARC price${r.admarc_effective ? ', effective ' + r.admarc_effective : ''}${r.admarc_source_note ? ' — ' + r.admarc_source_note : ''}`
+                    : 'No ADMARC price on record for this crop';
 
                 const communityMin = r.community_min_num ?? null;
                 const communityAvg = r.community_avg_num ?? null;
@@ -2508,9 +2551,10 @@ class AgroBusinessRevolution {
                     : '';
 
                 return `
-                <tr class="price-data-row" data-source="${esc(r.source)}" data-crop="${esc((r.crop_name || '').toLowerCase())}" data-district="${esc((r.district || '').toLowerCase())}" data-search="${esc(searchText)}" style="animation:serviceReveal .3s ease ${i * .03}s both">
+                <tr class="price-data-row" data-source="${esc(r.source)}" data-has-admarc="${admarcNum ? '1' : '0'}" data-crop="${esc((r.crop_name || '').toLowerCase())}" data-district="${esc((r.district || '').toLowerCase())}" data-search="${esc(searchText)}" style="animation:serviceReveal .3s ease ${i * .03}s both">
                     <td data-sort-value="${esc(r.crop_name || '')}"><span style="font-size:1.3rem">${this.getCropIcon(r.crop_name)}</span> <strong>${esc(r.crop_name || 'Unknown crop')}</strong><br><small style="color:var(--text-muted)">${esc(r.type)}</small></td>
                     <td data-sort-value="${esc(r.district || '')}">${esc(r.district)}<br><small style="color:var(--text-muted)">${esc(r.market)}</small></td>
+                    <td data-sort-value="${admarcNum ?? ''}" title="${esc(admarcTitle)}"><span class="price-badge">${admarcNum ? esc(fmt(admarcNum)) + perKg : '—'}</span><div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">${esc(admarcBagDisplay)}</div></td>
                     <td data-sort-value="${fewsNum ?? ''}"><span class="price-badge ${r.source === 'fews' ? 'price-high' : ''}">${esc(fewsDisplay)}${fewsNum ? perKg : ''}</span><div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">${esc(fewsPer50Display)}</div></td>
                     <td data-sort-value="${communityAvg ?? communityMin ?? ''}"><span class="price-badge ${r.source === 'community' ? 'price-high' : ''}">${esc(communityDisplay)}${hasCommunity ? perKg : ''}</span>${priceLevelBadge}${confirmedChip}<div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">${esc(communityBagDisplay)}</div></td>
                     <td>${esc(r.unit)}</td>
@@ -2543,6 +2587,7 @@ class AgroBusinessRevolution {
                         <input id="price-search" type="search" placeholder="Search crop, district, market, source, price..." style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
                         <select id="price-source-filter" style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
                             <option value="all">All sources</option>
+                            <option value="admarc">ADMARC Official only</option>
                             <option value="fews">AgroBiz Rate only</option>
                             <option value="community">Community only</option>
                         </select>
@@ -2554,19 +2599,19 @@ class AgroBusinessRevolution {
                             ${districtOptions}
                         </select>
                     </div>
-                    <p id="price-filter-stats" class="price-meta">Showing ${rows.length} price records: ${fews.length} AgroBiz Rate, ${community.length} community.</p>
+                    <p id="price-filter-stats" class="price-meta">Showing ${rows.length} price records: ${admarc.length} ADMARC official, ${fews.length} AgroBiz Rate, ${community.length} community.</p>
                     <div class="table-wrap" style="overflow-x:auto">
                     <table class="data-table sortable" id="price-combined-table">
                         <thead><tr>
-                            <th>Crop</th><th>Location</th><th>AgroBiz Rate <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>Community Range <small style="font-weight:400;color:var(--text-muted)">(per kg, min/avg/max)</small></th><th>Unit</th><th>Date</th><th>Source</th>
+                            <th>Crop</th><th>Location</th><th>ADMARC Official <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>AgroBiz Rate <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>Community Range <small style="font-weight:400;color:var(--text-muted)">(per kg, min/avg/max)</small></th><th>Unit</th><th>Date</th><th>Source</th>
                         </tr></thead>
                         <tbody>
-                            ${priceRows || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">No price data yet.</td></tr>`}
-                            <tr id="price-no-results" style="display:none"><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">No prices match your filters.</td></tr>
+                            ${priceRows || `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem">No price data yet.</td></tr>`}
+                            <tr id="price-no-results" style="display:none"><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem">No prices match your filters.</td></tr>
                         </tbody>
                     </table>
                     </div>
-                    <p class="price-meta" style="margin-top:1rem">AgroBiz rates are standard reference prices set for each Malawi crop. Community prices are farmer/trader reports, shown only after review — the value is the median of approved reports, marked <strong>✓ Confirmed</strong> once 3+ reports agree.</p>
+                    <p class="price-meta" style="margin-top:1rem">ADMARC Official is the government floor price, entered by hand from ADMARC/Ministry notices — hover a figure for its source and effective date. A dash means no official price is on record; the site shows no guess in its place. AgroBiz rates are standard reference prices set for each Malawi crop. Community prices are farmer/trader reports, shown only after review — the value is the median of approved reports, marked <strong>✓ Confirmed</strong> once 3+ reports agree.</p>
                 </div>
 
                 <div id="pane-report" class="price-pane" style="display:none">
@@ -2626,7 +2671,10 @@ class AgroBusinessRevolution {
                 let visible = 0;
                 area.querySelectorAll('.price-data-row').forEach(row => {
                     const matchesTerm = !term || row.dataset.search.includes(term);
-                    const matchesSource = source === 'all' || row.dataset.source === source;
+                    // ADMARC is an extra column rather than a row source, so it filters
+                    // on presence of a price instead of on the row's own source label.
+                    const matchesSource = source === 'all'
+                        || (source === 'admarc' ? row.dataset.hasAdmarc === '1' : row.dataset.source === source);
                     const matchesCrop = crop === 'all' || row.dataset.crop === crop;
                     const matchesDistrict = district === 'all' || (row.dataset.district && row.dataset.district.includes(district));
                     const show = matchesTerm && matchesSource && matchesCrop && matchesDistrict;

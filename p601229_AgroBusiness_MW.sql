@@ -35,6 +35,32 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `admarc_prices`
+--
+-- ADMARC official/floor prices. ADMIN-MAINTAINED, not fetched: admarc.mw no
+-- longer resolves, so there is no feed to scrape. district_id 0 means national,
+-- the same convention `price_overrides` uses. See
+-- migrations/2026-08-23-admarc-prices.sql.
+--
+
+CREATE TABLE `admarc_prices` (
+
+  `id` int NOT NULL,
+  `crop_id` int NOT NULL,
+  `district_id` int NOT NULL DEFAULT '0' COMMENT '0 = national, as in price_overrides',
+  `price_per_kg` decimal(10,2) NOT NULL,
+  `price_per_bag` decimal(10,2) DEFAULT NULL COMMENT 'NULL when ADMARC quoted per kg only',
+  `unit` varchar(16) NOT NULL DEFAULT 'kg',
+  `season` varchar(32) DEFAULT NULL COMMENT 'e.g. 2026/27 marketing season',
+  `effective_from` date NOT NULL,
+  `source_note` varchar(255) DEFAULT NULL COMMENT 'where this figure came from',
+  `set_by` varchar(50) NOT NULL DEFAULT 'admin',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `admin_login_attempts`
 --
 
@@ -858,6 +884,14 @@ INSERT INTO `seller_crops` (`seller_id`, `crop_id`) VALUES
 --
 
 --
+-- Indexes for table `admarc_prices`
+--
+ALTER TABLE `admarc_prices`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_admarc_scope` (`crop_id`,`district_id`,`effective_from`),
+  ADD KEY `idx_admarc_lookup` (`crop_id`,`effective_from`);
+
+--
 -- Indexes for table `admin_login_attempts`
 --
 ALTER TABLE `admin_login_attempts`
@@ -1046,6 +1080,12 @@ ALTER TABLE `seller_crops`
 --
 -- AUTO_INCREMENT for dumped tables
 --
+
+--
+-- AUTO_INCREMENT for table `admarc_prices`
+--
+ALTER TABLE `admarc_prices`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `admin_login_attempts`

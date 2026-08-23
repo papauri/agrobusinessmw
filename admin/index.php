@@ -842,6 +842,10 @@ a:hover { color: #7a6448; }
 .top-bar small { color: #6b5f52; }
 .logout { padding: .5rem 1.2rem; background: transparent; border: 1.5px solid #d5cfc4; border-radius: 6px; color: #6b5f52; font-size: .85rem; font-weight: 600; cursor: pointer; transition: all 0.18s ease; }
 .logout:hover { background: #b94040; border-color: #b94040; color: #fff; }
+.admin-nav { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+.admin-nav a { font-size: .875rem; font-weight: 600; color: #6b5f52; }
+.admin-nav a:hover { color: #8B7355; }
+.admin-nav a.logout { color: #6b5f52; }
 .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem; }
 .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; margin-bottom: 2rem; }
 .stat-box { background: #fff; border: 1px solid #e8e2d9; border-radius: 12px; padding: 1.5rem; text-align: center; border-top: 3px solid; }
@@ -898,7 +902,11 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
         <h1>🌾 AgroBusiness Malawi — Admin</h1>
         <small>KYC Application Review</small>
     </div>
-    <a href="?logout=1" class="logout">Logout</a>
+    <nav class="admin-nav">
+        <a href="admarc-prices.php">ADMARC prices</a>
+        <a href="price-audit.php">Price audit</a>
+        <a href="?logout=1" class="logout">Logout</a>
+    </nav>
 </div>
 
 <div class="container">

@@ -677,6 +677,17 @@ try {
             // and fill gaps where the source has no data for a crop/district.
             $fews = cp_apply_overrides($mysqli, $fews, $crop_id);
 
+            // ADMARC official floor prices — admin-maintained, never fetched.
+            // A failure here must not take the whole price page down: FEWS and
+            // community prices stand on their own.
+            $admarc = [];
+            $admarc_error = null;
+            try {
+                $admarc = admarc_effective_prices($mysqli, $crop_id);
+            } catch (Throwable $ae) {
+                $admarc_error = $ae->getMessage();
+            }
+
             // Community prices: only APPROVED reports from the last 45 days count.
             // The headline value is the MEDIAN (outlier-resistant); a group with
             // 3+ reports is "confirmed". Aggregation is done in PHP so we can use a
@@ -741,8 +752,11 @@ try {
                 'success'          => true,
                 'fews'             => $fews,
                 'community'        => $community,
+                'admarc'           => $admarc,
                 'fews_count'       => count($fews),
                 'community_count'  => count($community),
+                'admarc_count'     => count($admarc),
+                'admarc_error'     => $admarc_error,
                 'fews_source'      => $fews_cache['source_url'] ?? null,
                 'fews_cached_at'   => $fews_cache['fetched_at'] ?? null,
                 'fews_error'       => $fews_cache['error'] ?? null,
@@ -885,6 +899,82 @@ try {
 // Admin-set prices in `price_overrides` override the upstream reference rate for
 // a crop (district_id = 0 → all districts, else a specific district) and inject a
 // synthetic reference row where the source has no data for that crop/district.
+/**
+ * ADMARC official prices in force today.
+ *
+ * ADMARC is ADMIN-MAINTAINED, not fetched. The admarc.mw domain stopped
+ * resolving, so the old scrape (commit 9de275c) cannot be revived and nothing
+ * here reaches the network. Figures are entered by hand in the admin panel and
+ * every row carries the source it was taken from.
+ *
+ * Resolution rules, applied in PHP because the "latest row not in the future"
+ * pick is per crop+district:
+ *   - only rows with effective_from <= today are eligible, so a price can be
+ *     staged ahead of a season opening without showing early;
+ *   - the newest eligible effective_from wins, which is why a price change is a
+ *     new row rather than an edit — the history stays auditable;
+ *   - a district-specific row (district_id > 0) beats the national one
+ *     (district_id 0) for that district, matching how price_overrides resolves.
+ */
+function admarc_effective_prices(mysqli $db, ?int $crop_id): array
+{
+    // The table arrives via migrations/2026-08-23-admarc-prices.sql; a
+    // deployment that has not run it yet should degrade to "no ADMARC data"
+    // rather than error, exactly as cp_apply_overrides does for price_overrides.
+    $chk = $db->query("SHOW TABLES LIKE 'admarc_prices'");
+    if (!$chk || $chk->num_rows === 0) return [];
+
+    $sql = "SELECT a.crop_id, c.name AS crop_name, a.district_id, d.name AS district_name,
+                   a.price_per_kg, a.price_per_bag, a.unit, a.season,
+                   a.effective_from, a.source_note, a.updated_at
+            FROM admarc_prices a
+            JOIN crops c ON c.id = a.crop_id
+            LEFT JOIN districts d ON d.id = a.district_id
+            WHERE a.effective_from <= CURDATE()";
+    if ($crop_id) {
+        $stmt = $db->prepare($sql . " AND a.crop_id = ?");
+        if (!$stmt) return [];
+        $stmt->bind_param('i', $crop_id);
+    } else {
+        $stmt = $db->prepare($sql);
+        if (!$stmt) return [];
+    }
+    $stmt->execute();
+    $rows = stmt_fetch_all($stmt);
+
+    // Keep only the newest eligible row per crop+district.
+    $best = [];
+    foreach ($rows as $r) {
+        $key = $r['crop_id'] . '|' . $r['district_id'];
+        if (!isset($best[$key]) || $r['effective_from'] > $best[$key]['effective_from']) {
+            $best[$key] = $r;
+        }
+    }
+
+    $out = [];
+    foreach ($best as $r) {
+        $out[] = [
+            'crop_id'        => (int)$r['crop_id'],
+            'crop_name'      => $r['crop_name'],
+            'district_id'    => (int)$r['district_id'] ?: null,
+            'district_name'  => (int)$r['district_id'] ? $r['district_name'] : null,
+            'national'       => (int)$r['district_id'] === 0,
+            'price'          => (float)$r['price_per_kg'],
+            'price_per_bag'  => $r['price_per_bag'] !== null ? (float)$r['price_per_bag'] : null,
+            'unit'           => $r['unit'] ?: 'kg',
+            'season'         => $r['season'],
+            'effective_from' => $r['effective_from'],
+            'source_note'    => $r['source_note'],
+            'updated_at'     => $r['updated_at'],
+        ];
+    }
+
+    usort($out, fn($a, $b) => strcmp((string)$a['crop_name'], (string)$b['crop_name'])
+        ?: ((int)$a['national'] <=> (int)$b['national']));
+
+    return $out;
+}
+
 function cp_apply_overrides(mysqli $db, array $fews, ?int $crop_id): array
 {
     // Table is created lazily by the admin panel; tolerate its absence.

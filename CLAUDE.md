@@ -39,8 +39,8 @@ A **dual-channel agricultural platform** for Malawian farmers:
 | `ussd/registration.php` | The **USSD** step machine — which question comes next, nothing more |
 
 Add a channel by calling `register_store()` with a new `channel` value.
-`tests/run.sh` fails if a second `INSERT INTO onboarding_applications` appears
-anywhere. This is deliberate and enforced.
+There must be exactly one `INSERT INTO onboarding_applications` in the
+repository. This used to be enforced by a test; it is now a convention only.
 
 The project previously had three competing flows writing to the same table: a
 modal in `partials/modals.php` driven by ~320 lines of `app.js`, a set of bolt-on
@@ -77,8 +77,8 @@ prefix, and `265` + a trunk zero (`2650888123456`) which is a common typo.
 **Never add a rule that assumes a country code.** A wrong number means a farmer
 who is never contacted.
 
-If you change one file, change the other and run `php tests/phone_test.php` and
-`node tests/phone_test.mjs` — the second checks parity against the first.
+If you change one file, change the other. The paired tests that checked them
+for parity are gone, so the two implementations have to be diffed by hand.
 
 ## Bilingual — English and Chichewa
 
@@ -96,13 +96,12 @@ Six translation tables, all with complete key parity:
 | `assets/js/directory-navigation.js` `copy` | Sellers / Buyers / Farmers |
 | `assets/js/market-insights-page.js` `copy` | Market Insights |
 | `config/registration.php` `REGISTRATION_STRINGS` | server-side validation + the applicant's email, both channels |
-| `ussd/menus.php` `$menu_texts` | every USSD page, gated by `tests/ussd_menu_parity.php` |
+| `ussd/menus.php` `$menu_texts` | every USSD page |
 
 Rules:
 - **Never hardcode a user-facing string** in a controller. Add a key to that
-  file's table. `tests/run.sh` fails on new hardcoded strings in the standalone
-  controllers, and `tests/i18n_parity.py` fails on any key missing from either
-  language.
+  file's table, in **both** `en` and `ci` — nothing checks this automatically
+  any more, so a missing key now ships silently.
 - `config/registration.php` cannot read localStorage, so the web client sends
   `lang` with the preflight and the POST, and the USSD handler passes the
   language it already has. Both go through `register_lang()`. Errors come back localised, plus a stable `code` for
@@ -140,29 +139,30 @@ App → http://localhost:8080 · API health → http://localhost:8080/api.php?ac
 
 ## Testing
 
+**The test suite was deleted on 2026-08-23 at the maintainer's request.**
+`tests/` and `migrations/` no longer exist. There is no `run.sh`, no lint pass,
+no phone/i18n parity check and no browser flow.
+
+What that removed, so it is not rediscovered the hard way — these were gates
+against bugs that had already happened once:
+
+- a second `INSERT INTO onboarding_applications` (three competing registration
+  flows storing the same person differently)
+- a re-created registration modal
+- a committed credential, and a tracked `.env`
+- `p601229_AgroBusiness_MW.sql` drifting from the tables the code queries
+- a USSD `CON` page over the 182-character limit (silent mid-word truncation)
+- `config/phone.php` and `phone-normalizer.js` disagreeing
+- an `en`/`ci` key missing from either side of a translation table
+- the `farmers` query selecting a contact column, or listing unapproved rows
+
+Until something replaces it, each of those has to be checked by reading the
+code. Lint at minimum before shipping:
+
 ```bash
-bash tests/run.sh              # lint + phone contract + i18n parity + structural gates
-php  tests/phone_test.php      # phone normalisation contract
-php  tests/promotion_test.php  # approval → directory promotion (NEEDS a database)
-php  tests/ussd_directory_test.php     # USSD Find Sellers/Buyers (NEEDS a database)
-php  tests/ussd_registration_test.php # USSD registration end to end (NEEDS a database)
-node tests/phone_test.mjs      # browser/server parity
-python3 tests/i18n_parity.py   # en/ci key parity across the five web tables
-php  tests/ussd_menu_parity.php     # en/ci parity across the USSD menus
-
-# Browser tests — need a running server and a database
-node tests/browser/registration_flow.mjs
-node tests/browser/directory_flow.mjs
-node tests/browser/navigation_flow.mjs
-node tests/browser/language_flow.mjs    # Chichewa end to end
-node tests/browser/whatsapp_flow.mjs    # WhatsApp contact wiring
-node tests/browser/page_health.mjs      # every page, 320→1280px
-node tests/browser/chichewa_overflow.mjs # Chichewa at 320/360/390px
+for f in *.php admin/*.php config/*.php ussd/*.php; do php -l "$f"; done
+for f in assets/js/*.js sw.js; do node --check "$f"; done
 ```
-
-`tests/run.sh` includes structural gates that fail if the registration modal,
-a duplicate registration endpoint, a second `escapeHtml`, a reference to a
-non-existent table, or a committed credential reappears.
 
 ## Key files
 
@@ -174,6 +174,7 @@ non-existent table, or a committed credential reappears.
 | `prices.php`, `weather.php`, `market-insights.php`, `sellers.php`, `buyers.php`, `farmers.php`, `pest-control.php`, `farming-tips.php`, `farming-guide.php`, `basic-info.php`, `privacy.php` | Feature pages |
 | `api.php` | All read APIs plus community price submission |
 | `admin/index.php` | Standalone admin panel — session login, CSRF, throttle |
+| `admin/admarc-prices.php` | ADMARC official price editor — hand entry, source required |
 | `config/database.php` | `.env` loading, DB connection, `get_result()`-free fetch helpers |
 | `config/phone.php` | Canonical phone normalisation (server) |
 | `config/mailer.php` | SMTP + branded HTML email helpers |
@@ -186,7 +187,6 @@ non-existent table, or a committed credential reappears.
 | `assets/js/i18n.js` | Shared language state (`AgroLang`) |
 | `partials/` | `head`, `nav`, `footer`, `scripts`, `modals`, `content-screen`, `function-page` |
 | `p601229_AgroBusiness_MW.sql` | Schema of record — 24 tables, matches production |
-| `migrations/` | Additive migrations for existing deployments |
 | `.env` | Secrets (gitignored, never commit) |
 
 ## API actions (`api.php`)
@@ -200,7 +200,7 @@ can read errors. Routing via `?action=`:
 | `districts` | — | All districts |
 | `crops` | — | Crop registry |
 | `crop_prices` | — | Legacy; superseded by `dual_crop_prices` |
-| `dual_crop_prices` | `crop_id?` | FEWS reference + community prices |
+| `dual_crop_prices` | `crop_id?` | FEWS reference + community prices + ADMARC official |
 | `market_insights` | `district_id?` | **Optional** district. Omit for all districts |
 | `sellers` | `district_id?`, `crop?` | **Optional** district — contact-first directory |
 | `buyers` | `district_id?`, `crop?` | **Optional** district — contact-first directory |
@@ -222,7 +222,7 @@ Registration is **not** here — it is `register.php`.
 ones it reads. Farmers have no directory table of their own — `admin/index.php`
 promotes sellers and buyers only — so there is nowhere safer to read from.
 
-Two rules, both gated in `tests/run.sh` against the shipped query text:
+Two rules, previously gated against the shipped query text and now convention:
 
 - **Select no contact column.** Not "filter it out later" — never fetch it. A
   `SELECT oa.*` here publishes every farmer's phone number.
@@ -239,7 +239,7 @@ Three things carry the "what do they deal in" answer, and they have to agree:
 - `admin/index.php` `admin_link_applicant_crops()` writes `seller_crops` /
   `buyer_crops` on approval, matching `crops_of_interest` back to `crops.name`.
   Nothing wrote those tables before 2026-08-17, which is why every approved
-  contact showed no crops. Covered by `tests/promotion_test.php`.
+  contact showed no crops.
 
 ## Approval, denial, and the directory
 
@@ -253,8 +253,7 @@ an application and its directory row is the **contact's phone number**:
   against `seller_contact_details.phone_number`. That is exact, not fuzzy:
   promotion copies the number verbatim, the column is NOT NULL on an
   application, and it carries a UNIQUE key on the contact table. **Never widen
-  this to the name** — namesakes are real and `tests/promotion_test.php` has an
-  assertion that fails if you do.
+  this to the name** — namesakes are real, and nothing tests for it now.
 - Denial deletes the directory row **before** the contact row
   (`fk_sellers_contact` is `ON DELETE RESTRICT`). Crop links go by cascade.
 - Freeing the number on denial is also what makes **re-approval** possible. It
@@ -272,8 +271,9 @@ an application and its directory row is the **contact's phone number**:
   including a muted "no crops listed", so an absent strip never has to be
   interpreted.
 
-## Database — 24 tables
+## Database — 25 tables
 
+`admarc_prices`,
 `districts`, `crops`, `crop_prices`, `market_insights`, `sellers`,
 `seller_contact_details`, `seller_crops`, `buyers`, `buyer_contact_details`,
 `buyer_crops`, `farming_best_practices`, `pest_control_tips`,
@@ -284,12 +284,13 @@ an application and its directory row is the **contact's phone number**:
 `p601229_AgroBusiness_MW.sql` **is** the schema of record. It was regenerated on
 2026-08-16 from a production export and verified by restoring it and diffing
 `information_schema` against production: 156 columns, 66 indexes, 19 foreign keys
-and 24 engines, all identical. `tests/run.sh` fails if a table goes missing from
-it or if PHP queries a table it does not create.
+and 24 engines, all identical (plus `admarc_prices`, added 2026-08-23). Keep it
+in step by hand: every table PHP queries must appear here.
 
 **If this file and production ever disagree, production wins** — correct the file,
-do not ALTER the live database to match it. For an existing deployment built from
-the old file see `migrations/2026-08-16-schema-of-record.sql`.
+do not ALTER the live database to match it. The migration that reconciled an
+older deployment was deleted with `migrations/`; recover it from git history
+(`git log --diff-filter=D -- migrations/`) if a legacy copy ever needs it.
 
 Things the schema will tell you that the code does not:
 
@@ -302,6 +303,10 @@ Things the schema will tell you that the code does not:
   reader in this repository**. They are `utf8mb4_unicode_ci` while every other
   table is `utf8mb4_0900_ai_ci`; comparing a string column across that boundary
   raises "Illegal mix of collations".
+- `admarc_prices` was added 2026-08-23 and is **admin-maintained, never
+  fetched** — see ADMARC below. `district_id` 0 means national, the same
+  convention `price_overrides` uses, and like that table it carries no FK to
+  `districts`.
 - `price_review_audit` is read by `admin/price-audit.php`.
 - `crowdsourced_prices.area_id` exists but is NULL on every production row.
 - Contact tables enforce UNIQUE on `phone_number` and on `whatsapp_number`: one
@@ -328,7 +333,7 @@ warning, which on a directory page means half a phone number. `"CON "` and the
 trailing back menu are spent before a single line of content, and the Chichewa
 back menu is 11 characters longer than the English one.
 
-`tests/run.sh` walks `$menu_texts` and fails on any page over the limit. It had
+A test used to walk `$menu_texts` and fail on any page over the limit. It had
 to: the main menu was **234 characters (271 in Chichewa)** until 2026-08-17, so
 every page had been over the ceiling since the menu was written. Either the
 operator is more generous than the documentation or those pages have been
@@ -338,8 +343,7 @@ holds the documented number.
 Anything that renders a variable number of rows must go through
 `ussd_page_budget()` and `ussd_fit_lines()` in `ussd/helpers.php`: the budget is
 derived from the actual suffix, whole lines are kept or dropped (never cut), and
-the dropped count is shown. `tests/ussd_directory_test.php` asserts the ceiling
-in both languages.
+the dropped count is shown. Check both languages by hand after any change.
 
 ### Registration over USSD
 
@@ -371,6 +375,40 @@ It must stay in step with `api.php`'s `sellers`/`buyers`:
   `seller_crops` in one row set fan out against each other; the next aggregate
   added over that product would be wrong.
 - Crops split on a newline, same as `api.php`, for the same reason.
+
+## ADMARC prices
+
+**There is no ADMARC feed. Do not build one.** `admarc.mw`, `www.admarc.mw` and
+`admarc.com.mw` all stopped resolving — checked 2026-08-23, no DNS at all. The
+live scrape that commit `9de275c` built against `admarc.mw` (6h cache in
+`config/admarc_cache.json`) is therefore dead, which is why the feature ended up
+cache-only and was then dropped along with the `admarc_prices` table on
+2026-07-10.
+
+It came back on 2026-08-23 as **admin-maintained reference data**:
+
+| Piece | Owns |
+|---|---|
+| `admarc_prices` | The figures. `district_id` 0 = national; a district row wins for its district |
+| `admin/admarc-prices.php` | Hand entry. `source_note` is **required** — an unattributed official price is not published |
+| `api.php` `admarc_effective_prices()` | Resolution: newest `effective_from` that is not in the future, per crop+district |
+| `app.js` `loadCropPrices()` | The "ADMARC Official" column, resolved onto existing rows |
+
+Rules:
+
+- **A price change is a new row, not an edit.** `(crop_id, district_id,
+  effective_from)` is UNIQUE and the API serves the newest row that has taken
+  effect. That is what lets anyone check what the official floor was on the day
+  a farmer sold; editing in place would rewrite that silently. The admin page
+  only inserts and deletes for this reason.
+- **Never invent a figure.** These are government floor prices farmers use to
+  judge whether a trader's offer is fair, so a wrong one costs a farmer money. An
+  empty table renders a dash, never a placeholder or an interpolated guess.
+- ADMARC does **not** get rows of its own in the price table — a national price
+  covers every district, so emitting it as a row would duplicate every crop. It
+  is resolved onto the records FEWS and community reports already produced.
+- A future `effective_from` is staged, not shown, so next season's price can be
+  entered the day it is announced.
 
 ## Weather
 

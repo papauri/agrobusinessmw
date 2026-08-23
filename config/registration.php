@@ -22,8 +22,10 @@ declare(strict_types=1);
  *                           INSERT. Both channels call register_store().
  *
  *   Add a channel by calling register_store() with a new `channel` value. Do NOT
- *   write another INSERT into onboarding_applications; tests/run.sh fails if a
- *   second one appears.
+ *   write another INSERT into onboarding_applications. A test used to fail if a
+ *   second one appeared; that test is gone, so this is now convention only —
+ *   three competing INSERTs is exactly how the same person once got stored two
+ *   different ways.
  *
  * `channel` is an enum('web','ussd') on the table, so it is validated here
  * rather than trusted from a caller.
