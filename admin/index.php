@@ -1099,7 +1099,7 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
         <div style="background:#fff;border:1px solid #e8e2d9;border-radius:12px;padding:1.5rem">
             <h3 style="font-size:1rem;margin-bottom:.5rem;color:#3e3930">Update prices from source</h3>
             <p style="font-size:.85rem;color:#6b5f52;margin-bottom:1rem;line-height:1.5">
-                Re-fetches the AgroBiz reference rates from the upstream source and refreshes the cache.
+                Re-fetches the Global Benchmark rates from the upstream source and refreshes the cache.
             </p>
             <form method="post">
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">

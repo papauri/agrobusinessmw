@@ -283,7 +283,7 @@ tr:last-child td { border-bottom: none; }
   <?php if (!$prices): ?>
     <div class="card empty">
       No ADMARC prices recorded yet. Until one is added, the site shows only the
-      AgroBiz reference rate and community-reported prices — it does not display
+      Global Benchmark rate and community-reported prices — it does not display
       a placeholder or a guess.
     </div>
   <?php else: ?>

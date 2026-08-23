@@ -393,12 +393,21 @@ It must stay in step with `api.php`'s `sellers`/`buyers`:
 
 ## ADMARC prices
 
-**There is no ADMARC feed. Do not build one.** `admarc.mw`, `www.admarc.mw` and
-`admarc.com.mw` all stopped resolving — checked 2026-08-23, no DNS at all. The
-live scrape that commit `9de275c` built against `admarc.mw` (6h cache in
-`config/admarc_cache.json`) is therefore dead, which is why the feature ended up
-cache-only and was then dropped along with the `admarc_prices` table on
-2026-07-10.
+**ADMARC's site is `admarc.co.mw`.** `admarc.mw`, `www.admarc.mw` and
+`admarc.com.mw` do not resolve at all — which is why the scrape that commit
+`9de275c` built went permanently cache-only and the feature was eventually
+dropped with the table on 2026-07-10. It was pointed at a host that never
+existed. `admarc.co.mw` is live and publishes announcements.
+
+Even so, **prices are entered by hand, not scraped.** ADMARC publishes prose
+announcements, not a price feed, and the figures that matter come from more than
+one authority — ADMARC for its own buying price, the Ministry of Agriculture for
+the annual minimum farm gate list, the Cotton Council for cotton. There is
+nothing to poll, and a scraper over prose would silently drift.
+
+The table was populated on 2026-08-23 with the prices then in force (8 crops).
+Crops sold at auction — tobacco, tea, coffee — have no gazetted floor price and
+deliberately carry no row, as do sweet potato, tomatoes and Irish potatoes.
 
 It came back on 2026-08-23 as **admin-maintained reference data**:
 
@@ -408,6 +417,7 @@ It came back on 2026-08-23 as **admin-maintained reference data**:
 | `admin/admarc-prices.php` | Hand entry. `source_note` is **required** — an unattributed official price is not published |
 | `api.php` `admarc_effective_prices()` | Resolution: newest `effective_from` that is not in the future, per crop+district |
 | `app.js` `loadCropPrices()` | The "ADMARC Official" column, resolved onto existing rows |
+| — | The FEWS column is labelled **Global Benchmark** to readers; the price table carries no Source column |
 
 Rules:
 

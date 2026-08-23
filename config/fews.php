@@ -1,5 +1,7 @@
 <?php
-// FEWS reference-rate fetch + file cache (rates sourced upstream, presented under the AgroBiz brand).
+// FEWS reference-rate fetch + file cache. Surfaced to readers as the "Global Benchmark"
+// rate: the figures are Malawi market observations, published by an international
+// price-monitoring network, so the name describes the SOURCE's reach, not the market's.
 
 if (!function_exists('fews_get_prices')) {
     function fews_get_prices($db)
@@ -96,7 +98,7 @@ if (!function_exists('fews_fetch_prices')) {
                 'currency' => $item['currency'] ?? 'MWK',
                 'price_date' => $item['period_date'] ?? null,
                 // Origin is presented under the platform's own brand, not the upstream source.
-                'source_organization' => 'AgroBiz Reference',
+                'source_organization' => 'Global Benchmark',
             ];
         }
 

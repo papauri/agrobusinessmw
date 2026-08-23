@@ -2369,7 +2369,7 @@ class AgroBusinessRevolution {
             };
 
             // Combine FEWS and community reports into ONE row per crop + district,
-            // so a crop that has an AgroBiz reference AND community reports shows both
+            // so a crop that has a Global Benchmark rate AND community reports shows both
             // (and the price-level badge can compare them).
             const combinedMap = Object.create(null);
 
@@ -2411,7 +2411,7 @@ class AgroBusinessRevolution {
                 return combinedMap[key];
             };
 
-            // FEWS entries — populate the AgroBiz reference slot.
+            // FEWS entries — populate the Global Benchmark slot.
             fews.forEach(r => {
                 const rec = getRec(r.crop_id, r.crop_name, r.district_name || r.region || '—');
                 const ts = r.price_date ? new Date(r.price_date).getTime() : 0;
@@ -2424,21 +2424,70 @@ class AgroBusinessRevolution {
             });
 
             // Community entries — populate the community slot.
+            //
+            // api.php groups community reports by crop|district|MARKET, so one
+            // district with reports from two markets arrives as two entries. This
+            // map is keyed on crop+district only, so those entries have to be
+            // MERGED. They used to be assigned, which meant the last one silently
+            // replaced the others: a district showed one market's price under
+            // another market's name, and the reports it dropped were invisible.
+            //
+            // Merging keeps the widest min/max, sums the report counts, and takes
+            // a report-weighted mean so a market with 8 reports does not carry the
+            // same weight as one with a single report.
             community.forEach(r => {
                 const rec = getRec(r.crop_id, r.crop_name, r.district_name || '—');
                 const ts = r.last_reported ? new Date(r.last_reported).getTime() : 0;
+                const count = Number(r.report_count) || 0;
+
+                const min = Number(r.min_price) || null;
+                const avg = Number(r.avg_price) || null;
+                const max = Number(r.max_price) || null;
+                const minBag = Number(r.min_price_bag) || null;
+                const avgBag = Number(r.avg_price_bag) || null;
+                const maxBag = Number(r.max_price_bag) || null;
+
+                const lo = (a, b) => (a == null ? b : b == null ? a : Math.min(a, b));
+                const hi = (a, b) => (a == null ? b : b == null ? a : Math.max(a, b));
+                // Weighted mean, falling back to whichever side has a value.
+                const mean = (aVal, aN, bVal, bN) => {
+                    if (aVal == null) return bVal;
+                    if (bVal == null) return aVal;
+                    const w = aN + bN;
+                    return w > 0 ? Math.round((aVal * aN + bVal * bN) / w) : Math.round((aVal + bVal) / 2);
+                };
+
+                const prior = rec._communityReports || 0;
+
+                rec.community_min_num = lo(rec.community_min_num, min);
+                rec.community_max_num = hi(rec.community_max_num, max);
+                rec.community_avg_num = mean(rec.community_avg_num, prior, avg, count);
+                rec.community_min_bag = lo(rec.community_min_bag, minBag);
+                rec.community_max_bag = hi(rec.community_max_bag, maxBag);
+                rec.community_avg_bag = mean(rec.community_avg_bag, prior, avgBag, count);
+
+                rec._communityReports = prior + count;
+                rec._communityMarkets = rec._communityMarkets || new Set();
+                if (r.market_name) rec._communityMarkets.add(r.market_name);
+
                 rec._hasCommunity = true;
-                rec.communityPrice = `${fmt(r.min_price)} / ${fmt(r.avg_price)} / ${fmt(r.max_price)}`;
-                rec.community_min_num = Number(r.min_price) || null;
-                rec.community_avg_num = Number(r.avg_price) || null;
-                rec.community_max_num = Number(r.max_price) || null;
-                rec.community_min_bag = Number(r.min_price_bag) || null;
-                rec.community_avg_bag = Number(r.avg_price_bag) || null;
-                rec.community_max_bag = Number(r.max_price_bag) || null;
-                rec.community_confirmed = !!r.confirmed;
+                rec.communityPrice = `${fmt(rec.community_min_num)} / ${fmt(rec.community_avg_num)} / ${fmt(rec.community_max_num)}`;
+                // "Confirmed" is about agreement across reports, so it follows the
+                // combined count rather than any single market's flag.
+                rec.community_confirmed = rec._communityReports >= 3;
                 rec.unit = r.unit || rec.unit;
-                if (rec.market === '—') rec.market = r.market_name || '—';
-                rec.reports = `${r.report_count} report${Number(r.report_count) === 1 ? '' : 's'} · ${ago(r.last_reported)}`;
+
+                // Name the market only while there is exactly one; beyond that the
+                // label would be attributing a merged range to one of them.
+                if (rec._communityMarkets.size === 1) {
+                    rec.market = [...rec._communityMarkets][0];
+                } else if (rec._communityMarkets.size > 1) {
+                    rec.market = `${rec._communityMarkets.size} markets`;
+                } else if (rec.market === '—') {
+                    rec.market = r.market_name || '—';
+                }
+
+                rec.reports = `${rec._communityReports} report${rec._communityReports === 1 ? '' : 's'} · ${ago(r.last_reported)}`;
                 rec._ts = Math.max(rec._ts, ts);
             });
 
@@ -2446,11 +2495,11 @@ class AgroBusinessRevolution {
             Object.values(combinedMap).forEach(rec => {
                 if (rec._hasFews && rec._hasCommunity) {
                     rec.source = 'both';
-                    rec.sourceLabel = 'AgroBiz + Community';
+                    rec.sourceLabel = 'Global Benchmark + Community';
                     rec.type = 'Reference + farmer reports';
                 } else if (rec._hasFews) {
                     rec.source = 'fews';
-                    rec.sourceLabel = 'AgroBiz Rate';
+                    rec.sourceLabel = 'Global Benchmark';
                     rec.type = 'Retail reference';
                 }
             });
@@ -2541,16 +2590,16 @@ class AgroBusinessRevolution {
                 const communityBagDisplay = (communityMinBag || communityAvgBag || communityMaxBag) ?
                     `${BAG_KG}kg bag: ${communityMinBag ? 'MK ' + communityMinBag.toLocaleString() : '—'} / ${communityAvgBag ? 'MK ' + communityAvgBag.toLocaleString() : '—'} / ${communityMaxBag ? 'MK ' + communityMaxBag.toLocaleString() : '—'}` : '';
 
-                // Price level: community average vs AgroBiz reference rate (±15% band).
+                // Price level: community average vs the Global Benchmark rate (±15% band).
                 let priceLevelBadge = '';
                 if (communityAvg && fewsNum) {
                     const ratio = communityAvg / fewsNum;
                     if (ratio < 0.85) {
-                        priceLevelBadge = '<span class="price-level-badge low" title="More than 15% below the AgroBiz reference rate">Low</span>';
+                        priceLevelBadge = '<span class="price-level-badge low" title="More than 15% below the Global Benchmark rate">Low</span>';
                     } else if (ratio > 1.15) {
-                        priceLevelBadge = '<span class="price-level-badge high" title="More than 15% above the AgroBiz reference rate">High</span>';
+                        priceLevelBadge = '<span class="price-level-badge high" title="More than 15% above the Global Benchmark rate">High</span>';
                     } else {
-                        priceLevelBadge = '<span class="price-level-badge fair" title="Within 15% of the AgroBiz reference rate">Fair</span>';
+                        priceLevelBadge = '<span class="price-level-badge fair" title="Within 15% of the Global Benchmark rate">Fair</span>';
                     }
                 }
 
@@ -2570,7 +2619,6 @@ class AgroBusinessRevolution {
                     <td data-sort-value="${communityAvg ?? communityMin ?? ''}"><span class="price-badge ${r.source === 'community' ? 'price-high' : ''}">${esc(communityDisplay)}${hasCommunity ? perKg : ''}</span>${priceLevelBadge}${confirmedChip}<div style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem">${esc(communityBagDisplay)}</div></td>
                     <td>${esc(r.unit)}</td>
                     <td data-sort-value="${r._ts || 0}" style="color:var(--text-muted);font-size:.8rem">${esc(r.reports)}</td>
-                    <td data-sort-value="${esc(r.sourceLabel || '')}"><span class="price-badge" style="background:${r.source === 'fews' ? 'rgba(139,115,85,.14)' : 'rgba(200,164,90,.16)'};color:${r.source === 'fews' ? 'var(--primary)' : 'var(--accent-dark)'}">${esc(r.sourceLabel)}</span></td>
                 </tr>`;
             }).join('');
 
@@ -2586,7 +2634,7 @@ class AgroBusinessRevolution {
             const area = document.getElementById('content-area');
             area.innerHTML = `
                 <h2 style="font-family:'DM Serif Display',serif;margin-bottom:1rem;color:var(--text-primary)">Crop Prices</h2>
-                <p class="price-meta" style="margin-bottom:1.25rem">AgroBiz reference rates and community market reports are shown side by side in one searchable table. Community prices carry a level badge — <span class="price-level-badge low">Low</span> <span class="price-level-badge fair">Fair</span> <span class="price-level-badge high">High</span> — showing how they compare to the AgroBiz reference rate (±15%).</p>
+                <p class="price-meta" style="margin-bottom:1.25rem">Official ADMARC prices, the Global Benchmark rate and community market reports are shown side by side in one searchable table. Community prices carry a level badge — <span class="price-level-badge low">Low</span> <span class="price-level-badge fair">Fair</span> <span class="price-level-badge high">High</span> — showing how they compare to the Global Benchmark (±15%).</p>
 
                 <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap">
                     <button class="price-tab active" id="tab-prices" onclick="app._priceTab('prices')">All Prices <span style="background:var(--accent);color:#fff;border-radius:20px;padding:.1rem .5rem;font-size:.75rem;margin-left:.3rem">${rows.length}</span></button>
@@ -2599,7 +2647,7 @@ class AgroBusinessRevolution {
                         <select id="price-source-filter" style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
                             <option value="all">All sources</option>
                             <option value="admarc">ADMARC Official only</option>
-                            <option value="fews">AgroBiz Rate only</option>
+                            <option value="fews">Global Benchmark only</option>
                             <option value="community">Community only</option>
                         </select>
                         <select id="price-crop-filter" style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
@@ -2610,19 +2658,19 @@ class AgroBusinessRevolution {
                             ${districtOptions}
                         </select>
                     </div>
-                    <p id="price-filter-stats" class="price-meta">Showing ${rows.length} price records: ${admarc.length} ADMARC official, ${fews.length} AgroBiz Rate, ${community.length} community.</p>
+                    <p id="price-filter-stats" class="price-meta">Showing ${rows.length} price records: ${admarc.length} ADMARC official, ${fews.length} global benchmark, ${community.length} community.</p>
                     <div class="table-wrap" style="overflow-x:auto">
                     <table class="data-table sortable" id="price-combined-table">
                         <thead><tr>
-                            <th>Crop</th><th>Location</th><th>ADMARC Official <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>AgroBiz Rate <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>Community Range <small style="font-weight:400;color:var(--text-muted)">(per kg, min/avg/max)</small></th><th>Unit</th><th>Date</th><th>Source</th>
+                            <th>Crop</th><th>Location</th><th>ADMARC Official <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>Global Benchmark <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>Community Range <small style="font-weight:400;color:var(--text-muted)">(per kg, min/avg/max)</small></th><th>Unit</th><th>Date</th>
                         </tr></thead>
                         <tbody>
-                            ${priceRows || `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem">No price data yet.</td></tr>`}
-                            <tr id="price-no-results" style="display:none"><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem">No prices match your filters.</td></tr>
+                            ${priceRows || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">No price data yet.</td></tr>`}
+                            <tr id="price-no-results" style="display:none"><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">No prices match your filters.</td></tr>
                         </tbody>
                     </table>
                     </div>
-                    <p class="price-meta" style="margin-top:1rem">ADMARC Official is the government floor price, entered by hand from ADMARC/Ministry notices — hover a figure for its source and effective date. A dash means no official price is on record; the site shows no guess in its place. AgroBiz rates are standard reference prices set for each Malawi crop. Community prices are farmer/trader reports, shown only after review — the value is the median of approved reports, marked <strong>✓ Confirmed</strong> once 3+ reports agree.</p>
+                    <p class="price-meta" style="margin-top:1rem">ADMARC Official is the government floor price, entered by hand from ADMARC/Ministry notices — hover a figure for its source and effective date. A dash means no official price is on record; the site shows no guess in its place. The Global Benchmark is the internationally monitored market rate for each crop, tracked by a global price-monitoring network and refreshed from source. Community prices are farmer/trader reports, shown only after review — the value is the median of approved reports, marked <strong>✓ Confirmed</strong> once 3+ reports agree.</p>
                 </div>
 
                 <div id="pane-report" class="price-pane" style="display:none">

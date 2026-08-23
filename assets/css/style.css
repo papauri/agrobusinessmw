@@ -2170,7 +2170,7 @@ button.overview-item {
     line-height: 1.5;
 }
 
-/* Community price level vs AgroBiz reference rate */
+/* Community price level vs the Global Benchmark rate */
 .price-level-badge {
     display: inline-block;
     margin-left: 0.4rem;
