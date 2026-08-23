@@ -87,7 +87,7 @@ The reader's language lives in `localStorage.preferredLanguage` (`'en'` / `'ci'`
 `app.js` routes its own switcher through `_persistLanguage()` so the standalone
 pages re-render instead of waiting for a reload.
 
-Six translation tables, all with complete key parity:
+Seven translation tables, all with complete key parity:
 
 | Table | Covers |
 |---|---|
@@ -96,6 +96,7 @@ Six translation tables, all with complete key parity:
 | `assets/js/directory-navigation.js` `copy` | Sellers / Buyers / Farmers |
 | `assets/js/market-insights-page.js` `copy` | Market Insights |
 | `config/registration.php` `REGISTRATION_STRINGS` | server-side validation + the applicant's email, both channels |
+| `api.php` `API_STRINGS` | every message `api.php` returns to a reader, via `api_t()` |
 | `ussd/menus.php` `$menu_texts` | every USSD page |
 
 Rules:
@@ -111,6 +112,15 @@ Rules:
   `lang` with the preflight and the POST, and the USSD handler passes the
   language it already has. Both go through `register_lang()`. Errors come back localised, plus a stable `code` for
   anything that needs to branch on the reason rather than the prose.
+- `api.php` validates everything the client does, so its answers need the same
+  language. The client sends `lang` with `submit_price` (body) and `markets`
+  (query); `api_lang()` reads it once, `api_t()` resolves the message. **Only an
+  `ApiError` reaches the reader** — it carries a key from `API_STRINGS` and is
+  raised deliberately. Everything else is logged and answered with
+  `unavailable`, because several throw sites interpolate `$mysqli->error` and
+  the old catch echoed `$e->getMessage()` straight to the browser.
+  Errors return a stable `code` alongside the prose, so nothing has to match
+  translated text.
 - The applicant's confirmation email goes out in the language they registered
   in. The review team's copy is always English.
 - **Watch noun-class agreement.** Chichewa concords agree with the noun class of

@@ -3023,6 +3023,10 @@ class AgroBusinessRevolution {
                             phone: phone,
                             email: email,
                             channel: 'web',
+                            // api.php validates everything the guards above do.
+                            // Without this it would answer a Chichewa reader in
+                            // English on an otherwise Chichewa page.
+                            lang: this.currentLang,
                         })
                     });
                     msg.style.display = 'block';
@@ -3078,7 +3082,7 @@ class AgroBusinessRevolution {
                     const id = +prDistrict.value;
                     if (!id) return;
                     try {
-                        const res = await this.apiCall(`api.php?action=markets&district_id=${id}`);
+                        const res = await this.apiCall(`api.php?action=markets&district_id=${id}&lang=${encodeURIComponent(this.currentLang)}`);
                         if (res.success) {
                             // Market names are created by anonymous price reports
                             // (api.php submit_price does find-or-create), so this is

@@ -179,13 +179,119 @@ try {
     ob_clean();
     // Still HTTP 200 with success:false — the frontend reads the body, not the
     // status. The message is deliberately generic; the detail is in the log.
+    // It genuinely is generic now: this used to echo $e->getMessage(), and the
+    // throws above it name the .env file and the MySQLi extension.
+    error_log('api.php bootstrap failed: ' . $e->getMessage());
     http_response_code(200);
     echo json_encode([
         'success'   => false,
-        'error'     => $e->getMessage(),
+        'error'     => api_t('unavailable'),
+        'code'      => 'unavailable',
         'timestamp' => date('c')
     ]);
     exit;
+}
+
+// ── User-facing API strings ─────────────────────────────────────────────────
+/**
+ * Messages this API returns to a reader, in the reader's language.
+ *
+ * Two problems this fixes at once.
+ *
+ * LANGUAGE. Everything the web client validates is also validated here, and the
+ * server's copy was English-only. A Chichewa reader who got past the client
+ * guards — a crafted request, a race, or a browser that ran the form before the
+ * script bound — was answered in English on an otherwise Chichewa page.
+ *
+ * LEAKAGE. The catch at the bottom of this file returned $e->getMessage()
+ * verbatim, and several throw sites interpolate $mysqli->error, so a driver
+ * message naming the query and its columns could be handed to the browser. That
+ * is exactly what the project convention forbids: log the detail, serve a
+ * generic message. Only an ApiError — raised deliberately, with a key from this
+ * table — is now shown to a reader; anything else is logged and answered with
+ * `unavailable`.
+ *
+ * Keys must exist in BOTH languages. Nothing checks this automatically.
+ */
+const API_STRINGS = [
+    'en' => [
+        'crop_required'    => 'Choose a crop.',
+        'price_required'   => 'Enter a price per kg or per bag.',
+        'price_too_high'   => 'Price seems too high. Please check the amount in MWK.',
+        'district_required' => 'Choose a district.',
+        'market_required'  => 'Enter the market or location.',
+        'phone_invalid'    => 'Enter a Malawi number as 0888 123 456, or an international number with its country code.',
+        'email_required'   => 'Enter a valid email address.',
+        'crop_district_required' => 'Choose a crop and a district.',
+        'ref_required'     => 'Enter your application reference.',
+        'ref_not_found'    => 'No application was found with that reference. Check it and try again.',
+        'unknown_action'   => 'That request was not recognised.',
+        'unavailable'      => 'The service is temporarily unavailable. Please try again shortly.',
+        'submit_approved'  => 'Price confirmed and published. Thank you for helping fellow farmers!',
+        'submit_flagged'   => 'Thank you! Your price looks unusual, so our team will check it before it shows.',
+        'submit_pending'   => 'Thank you! Your price has been received and will appear once reviewed.',
+    ],
+    'ci' => [
+        'crop_required'    => 'Sankhani mbeu.',
+        'price_required'   => 'Lembani mtengo pa kg kapena pa thumba.',
+        'price_too_high'   => 'Mtengowu ukuoneka wokwera kwambiri. Onaninso ndalama mu MWK.',
+        'district_required' => 'Sankhani boma.',
+        'market_required'  => 'Lembani msika kapena malo.',
+        'phone_invalid'    => 'Lembani nambala ya ku Malawi ngati 0888 123 456, kapena nambala ya kunja ndi kodi ya dziko lake.',
+        'email_required'   => 'Lembani imelo yolondola.',
+        'crop_district_required' => 'Sankhani mbeu ndi boma.',
+        'ref_required'     => 'Lembani nambala ya fomu yanu.',
+        'ref_not_found'    => 'Palibe fomu yopezeka ndi nambala imeneyi. Ionani ndipo yesaninso.',
+        'unknown_action'   => 'Pempho lanu silinadziwike.',
+        'unavailable'      => 'Ntchitoyi sikupezeka pakadali pano. Chonde yesaninso posachedwa.',
+        'submit_approved'  => 'Mtengo watsimikizidwa ndipo waonetsedwa. Zikomo pothandiza alimi anzanu!',
+        'submit_flagged'   => 'Zikomo! Mtengo wanu ukuwoneka wachilendo, choncho gulu lathu liuyang\'ana usanawonetsedwe.',
+        'submit_pending'   => 'Zikomo! Mtengo wanu walandiridwa ndipo uwonetsedwa ukayang\'anidwa.',
+    ],
+];
+
+/**
+ * The reader's language for this request.
+ *
+ * Read once and remembered, because the JSON body can only be consumed once.
+ * Anything that is not 'ci' is English — an unknown value must not blank the
+ * message.
+ */
+function api_lang(?string $requested = null): string
+{
+    static $lang = null;
+    if ($requested !== null) {
+        $lang = strtolower(trim($requested)) === 'ci' ? 'ci' : 'en';
+    }
+    if ($lang === null) {
+        $fromQuery = $_GET['lang'] ?? null;
+        $lang = is_string($fromQuery) && strtolower(trim($fromQuery)) === 'ci' ? 'ci' : 'en';
+    }
+    return $lang;
+}
+
+/** One message, in the reader's language. Falls back to English, then the key. */
+function api_t(string $key): string
+{
+    $lang = api_lang();
+    return API_STRINGS[$lang][$key] ?? API_STRINGS['en'][$key] ?? $key;
+}
+
+/**
+ * An error meant for the reader.
+ *
+ * Carries the key as well as the prose so the client can branch on the reason
+ * rather than matching translated text — the same contract
+ * config/registration.php offers through RegistrationError.
+ */
+class ApiError extends Exception
+{
+    public string $key;
+    public function __construct(string $key)
+    {
+        $this->key = $key;
+        parent::__construct(api_t($key));
+    }
 }
 
 /**
@@ -525,7 +631,7 @@ try {
             $district_id = (int)($_GET['district_id'] ?? 0);
 
             if (!$crop_id || !$district_id) {
-                throw new Exception('Crop ID and District ID are required');
+                throw new ApiError('crop_district_required');
             }
 
             $query = "
@@ -562,7 +668,7 @@ try {
             $crop_id = (int)($_GET['crop_id'] ?? 0);
 
             if (!$crop_id) {
-                throw new Exception('Crop ID is required');
+                throw new ApiError('crop_required');
             }
 
             $query = "
@@ -636,7 +742,7 @@ try {
         // ── ONBOARDING: Check application status ────────────────────
         case 'check_application':
             $ref  = strtoupper(trim($_GET['ref'] ?? ''));
-            if (!$ref) throw new Exception('Reference number is required');
+            if (!$ref) throw new ApiError('ref_required');
 
             $stmt = $mysqli->prepare(
                 "SELECT a.application_ref, a.user_type, a.full_name, a.status,
@@ -650,7 +756,7 @@ try {
             $stmt->execute();
             $row = stmt_fetch_one($stmt);
 
-            if (!$row) throw new Exception('Application not found');
+            if (!$row) throw new ApiError('ref_not_found');
 
             echo json_encode(['success' => true, 'data' => $row, 'timestamp' => date('c')]);
             break;
@@ -767,7 +873,7 @@ try {
         case 'markets':
             // Markets/locations for a district (each district can have many).
             $district_id = isset($_GET['district_id']) ? (int)$_GET['district_id'] : 0;
-            if (!$district_id) throw new Exception('district_id is required.');
+            if (!$district_id) throw new ApiError('district_required');
             $stmt = $mysqli->prepare("SELECT id, name FROM markets WHERE district_id = ? ORDER BY name");
             $stmt->bind_param('i', $district_id);
             $stmt->execute();
@@ -777,6 +883,9 @@ try {
         case 'submit_price':
             // Farmer submits a crowdsourced price
             $body = json_decode(file_get_contents('php://input'), true) ?? [];
+            // Adopt the reader's language before the first possible throw, so
+            // every rejection below comes back in the language they are reading.
+            api_lang(is_array($body) ? (string)($body['lang'] ?? '') : '');
             $crop_id    = (int)($body['crop_id']    ?? 0);
             $district_id = isset($body['district_id']) ? (int)$body['district_id'] : null;
             $unit       = preg_replace('/[^a-zA-Z\/]/', '', $body['unit'] ?? 'kg');
@@ -792,26 +901,26 @@ try {
             if ($price <= 0 && $bagInput > 0) $price = round($bagInput / $BAG_KG, 2);
 
             if (!$crop_id) {
-                throw new Exception('crop_id is required.');
+                throw new ApiError('crop_required');
             }
             if ($price <= 0) {
-                throw new Exception('Enter a price per kg or per bag.');
+                throw new ApiError('price_required');
             }
             if ($price > 100000) {
-                throw new Exception('Price seems too high. Please check the amount in MWK.');
+                throw new ApiError('price_too_high');
             }
             // Web reports require full context so the price is useful and reviewable.
             if ($channel === 'web') {
-                if (!$district_id)                                throw new Exception('District is required.');
-                if (mb_strlen($market) < 2)                       throw new Exception('Market / location is required.');
+                if (!$district_id)                                throw new ApiError('district_required');
+                if (mb_strlen($market) < 2)                       throw new ApiError('market_required');
                 // Canonicalise to the same E.164 the registration flow stores, so
                 // the member lookup below compares like with like.
                 $canonicalPhone = agro_normalize_phone($phone);
                 if ($canonicalPhone === null) {
-                    throw new Exception('Enter a Malawi number as 0888 123 456, or an international number with its country code.');
+                    throw new ApiError('phone_invalid');
                 }
                 $phone = $canonicalPhone;
-                if (!filter_var($email, FILTER_VALIDATE_EMAIL))   throw new Exception('A valid email is required.');
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL))   throw new ApiError('email_required');
             }
 
             // Match submitter to an approved member by the trailing phone digits
@@ -867,11 +976,10 @@ try {
             $stmt->bind_param('iiddssissssis', $crop_id, $district_id, $price, $price_per_bag, $unit, $market, $market_id, $phone, $emailVal, $channel, $status, $is_member, $flag);
             $stmt->execute();
 
-            $msg = $status === 'approved'
-                ? 'Price confirmed and published. Thank you for helping fellow farmers!'
-                : ($status === 'flagged'
-                    ? 'Thank you! Your price looks unusual, so our team will check it before it shows.'
-                    : 'Thank you! Your price has been received and will appear once reviewed.');
+            // Localised for any consumer reading `message` directly. The web
+            // client renders from `status` instead, so the two cannot drift into
+            // disagreeing about what happened.
+            $msg = api_t('submit_' . $status);
             echo json_encode([
                 'success'   => true,
                 'status'    => $status,
@@ -882,14 +990,35 @@ try {
             break;
 
         default:
-            throw new Exception('Unknown action. Available actions: test, districts, crops, crop_prices, dual_crop_prices, markets, submit_price, market_insights, sellers, buyers, pest_control, farming_tips, basic_info, check_application.');
+            // The action list used to be echoed back to the caller. It is a map
+            // of the API's surface and belongs in the log, not in a response to
+            // something that just sent an unrecognised action.
+            error_log('api.php: unknown action ' . var_export($action ?? '', true));
+            throw new ApiError('unknown_action');
     }
-} catch (Throwable $e) {
+} catch (ApiError $e) {
+    // Raised deliberately, with a key from API_STRINGS: safe to show, and the
+    // client can branch on `code` rather than matching translated prose.
     ob_clean();
     http_response_code(200);
     echo json_encode([
         'success'   => false,
         'error'     => $e->getMessage(),
+        'code'      => $e->key,
+        'action'    => $action ?? '',
+        'timestamp' => date('c')
+    ]);
+} catch (Throwable $e) {
+    // Anything else is ours, not the reader's. Several throw sites interpolate
+    // $mysqli->error, and under PHP 8 mysqli itself raises — so getMessage()
+    // here can carry the query text and column names. Log it; say one sentence.
+    ob_clean();
+    error_log('api.php action ' . var_export($action ?? '', true) . ' failed: ' . $e->getMessage());
+    http_response_code(200);
+    echo json_encode([
+        'success'   => false,
+        'error'     => api_t('unavailable'),
+        'code'      => 'unavailable',
         'action'    => $action ?? '',
         'timestamp' => date('c')
     ]);
