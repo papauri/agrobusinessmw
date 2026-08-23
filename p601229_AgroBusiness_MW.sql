@@ -1000,9 +1000,21 @@ ALTER TABLE `market_insights`
 --
 -- Indexes for table `onboarding_applications`
 --
+-- The four uniq_onboarding_* keys are the backstop register_store() catches as
+-- errno 1062. They were added 2026-08-23; before that the duplicate check was
+-- check-then-act with nothing underneath it, so two concurrent applications on
+-- the same phone both passed the SELECT and both inserted. They enforce exactly
+-- the rule register_find_duplicates() already applies, so nothing that
+-- previously succeeded now fails. The optional columns store NULL rather than
+-- '', and MySQL allows many NULLs in a UNIQUE index, so an applicant with no
+-- email or national id is unaffected.
 ALTER TABLE `onboarding_applications`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `application_ref` (`application_ref`),
+  ADD UNIQUE KEY `uniq_onboarding_phone` (`phone_number`),
+  ADD UNIQUE KEY `uniq_onboarding_whatsapp` (`whatsapp_number`),
+  ADD UNIQUE KEY `uniq_onboarding_email` (`email`),
+  ADD UNIQUE KEY `uniq_onboarding_nid` (`national_id`),
   ADD KEY `idx_onboarding_district_integrity` (`district_id`),
   ADD KEY `idx_onboarding_whatsapp` (`whatsapp_number`);
 

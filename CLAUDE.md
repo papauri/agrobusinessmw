@@ -232,6 +232,49 @@ Two rules, previously gated against the shipped query text and now convention:
 `privacy.php` §3 states what the farmer roster publishes (name, district,
 village, crops) and what it never does. Change one and change the other.
 
+## Admin flows — registration, approval, price review
+
+Three things were wrong here until 2026-08-23, all of the same shape: a control
+that looked present but could not fire.
+
+- **The duplicate check had no backstop.** `register_store()` catches errno 1062
+  as "the UNIQUE key catching a race", but `onboarding_applications` carried
+  UNIQUE only on `id` and `application_ref` — so two submissions of the same
+  number both passed the SELECT and both inserted. The four `uniq_onboarding_*`
+  keys now exist and enforce exactly what `register_find_duplicates()` already
+  applied. They are **per column**, so the one case still unguarded is a phone
+  equal to a *different* application's whatsapp number.
+- **`execute()` does not return false on a duplicate.** PHP 8.1+ makes mysqli
+  throw, so testing the return value left the 1062 branch unreachable a second
+  way and the applicant saw the generic "try again later" instead of their
+  existing reference. `register_store()` now wraps it. `ussd/config.php` hit the
+  same trap for connections — assume any `execute()` can throw.
+- **Price review recorded `reviewed_by='admin'`.** The identity-aware endpoint
+  `admin/price-review.php` existed, but the only thing routing to it was a
+  *client-side* intercept in `sortable-table.js`; the plain form posted to the
+  inline handler in `admin/index.php`, which hardcoded the string, had no
+  status guard, no transaction and no `affected_rows` check. Production already
+  carries a row stamped that way. The inline handler is now the equal of the
+  endpoint. **A browser intercept is not an access control** — whatever the
+  no-JS path does is what the system does.
+
+Also fixed: `admin/index.php` authenticated against `SELECT ... LIMIT 1` rather
+than the submitted username (a second admin account could never log in), and its
+session omitted `admin_user_id`, which `price-review.php` and
+`admarc-prices.php` both require — so a session created there could approve
+applicants but not review prices. Both login paths now produce the same session.
+
+Rules:
+
+- **A rejected write must say so.** A stale CSRF token used to fall through both
+  the approval and the price-review handlers in silence, re-rendering the page
+  with the applicant still pending and no reason given.
+- **Never put `$e->getMessage()` in front of a user.** Under PHP 8 that is a
+  driver string carrying the query and column names. Log it, show one sentence.
+- Reviewing an already-reviewed price report is refused, not applied. It would
+  rewrite `reviewed_by`/`reviewed_at` and fire `trg_price_audit_after_update`
+  again, adding an audit row for a decision nobody made twice.
+
 ## Crops in the directory
 
 Three things carry the "what do they deal in" answer, and they have to agree:

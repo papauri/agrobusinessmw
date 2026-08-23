@@ -125,5 +125,9 @@ try {
     ]);
 } catch (Throwable $e) {
     try { $db->rollback(); } catch (Throwable $ignored) {}
-    respond(409, ['ok' => false, 'error' => $e->getMessage()]);
+    // Under PHP 8 mysqli raises mysqli_sql_exception, so getMessage() can carry
+    // the query text and column names. Log the detail, return the one fact the
+    // reviewer needs: their decision did not save.
+    error_log('Price review failed for #' . $priceId . ': ' . $e->getMessage());
+    respond(409, ['ok' => false, 'error' => 'The review could not be saved. Reload and try again.']);
 }

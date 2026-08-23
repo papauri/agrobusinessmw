@@ -474,11 +474,30 @@ function register_store(mysqli $db, array $body, string $channel): array
         $app['business_name'],
         $channel
     );
-    if (!$stmt->execute()) {
-        // 1062 is the UNIQUE key catching a race the SELECT above could not.
-        $duplicateKey = $stmt->errno === 1062;
+    // 1062 is one of the uniq_onboarding_* keys catching a race the SELECT above
+    // could not: two submissions of the same number can both pass the duplicate
+    // check before either has inserted. Those keys did not exist until
+    // 2026-08-23, which made this branch unreachable and let the race through.
+    // Note the keys are per column, so the one case still not backstopped is a
+    // phone equal to a DIFFERENT application's whatsapp number — the SELECT
+    // covers it, but two racing inserts would not.
+    //
+    // execute() is wrapped rather than tested: PHP 8.1+ makes mysqli throw
+    // (MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT), so on a duplicate key it
+    // raises instead of returning false. Reading the return value alone left
+    // this branch unreachable a second way, and the applicant saw the generic
+    // "try again later" instead of being told their number is already
+    // registered and given the reference. ussd/config.php hit the same trap.
+    try {
+        $ok = $stmt->execute();
+        $errno = $stmt->errno;
+    } catch (mysqli_sql_exception $e) {
+        $ok = false;
+        $errno = $e->getCode();
+    }
+    if (!$ok) {
         $stmt->close();
-        throw new RegistrationError($duplicateKey ? 'duplicate_race' : 'save_failed');
+        throw new RegistrationError($errno === 1062 ? 'duplicate_race' : 'save_failed');
     }
     $stmt->close();
 

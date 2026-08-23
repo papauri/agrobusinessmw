@@ -64,15 +64,43 @@ $db->query(
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )"
 );
-$adminRow = ($res = $db->query("SELECT username, password_hash FROM admin_users LIMIT 1")) ? $res->fetch_assoc() : null;
-if (!$adminRow) {
-    $seedUser  = $_ENV['ADMIN_USER'] ?? 'admin';
-    $seedPass  = $_ENV['ADMIN_PASSWORD'] ?? bin2hex(random_bytes(8));
+/**
+ * Look one admin up BY USERNAME.
+ *
+ * This used to be `SELECT ... LIMIT 1` with no WHERE, so whichever row came back
+ * first was the only account that could ever log in here: add a second admin and
+ * they authenticate against the first admin's hash, which fails for them and
+ * succeeds for nobody new. admin/gateway.php always matched on username; this
+ * path did not, and the two disagreeing is the bug.
+ */
+function admin_find_user(mysqli $db, string $username): ?array {
+    if ($username === '') return null;
+    $stmt = $db->prepare("SELECT id, username, password_hash FROM admin_users WHERE username = ? LIMIT 1");
+    if (!$stmt) return null;
+    $stmt->bind_param('s', $username);
+    $found = null;
+    if ($stmt->execute()) {
+        $stmt->bind_result($uid, $uname, $uhash);
+        if ($stmt->fetch()) {
+            $found = ['id' => (int)$uid, 'username' => (string)$uname, 'password_hash' => (string)$uhash];
+        }
+    }
+    $stmt->close();
+    return $found;
+}
+
+// Seed the first account from .env when the table is empty. Only ever an insert
+// on an empty table — an existing account is never overwritten from .env.
+$hasAdmin = ($res = $db->query("SELECT id FROM admin_users LIMIT 1")) && $res->fetch_row();
+if (!$hasAdmin) {
+    $seedUser = $_ENV['ADMIN_USER'] ?? 'admin';
+    $seedPass = $_ENV['ADMIN_PASSWORD'] ?? bin2hex(random_bytes(8));
     $hash = password_hash($seedPass, PASSWORD_DEFAULT);
-    $stmt = $db->prepare("INSERT INTO admin_users (username, password_hash) VALUES (?, ?)");
-    $stmt->bind_param('ss', $seedUser, $hash);
-    $stmt->execute();
-    $adminRow = ['username' => $seedUser, 'password_hash' => $hash];
+    if ($stmt = $db->prepare("INSERT INTO admin_users (username, password_hash) VALUES (?, ?)")) {
+        $stmt->bind_param('ss', $seedUser, $hash);
+        $stmt->execute();
+        $stmt->close();
+    }
 }
 
 // ─── LOGIN THROTTLE ───────────────────────────────────────────────────────────
@@ -158,11 +186,23 @@ if (!isset($_SESSION['admin_logged_in'])) {
             exit;
         }
 
-        if ($submittedUser === $adminRow['username']
-            && password_verify($_POST['password'], $adminRow['password_hash'])) {
+        $adminRow = admin_find_user($db, $submittedUser);
+        if ($adminRow !== null
+            && password_verify((string)$_POST['password'], $adminRow['password_hash'])) {
             admin_record_attempt($db, $clientIp, $submittedUser, true);
             admin_clear_fails($db, $clientIp);
+            // Authentication is the privilege boundary — rotate the session id
+            // before storing identity, exactly as admin/gateway.php does.
+            session_regenerate_id(false);
             $_SESSION['admin_logged_in'] = true;
+            // admin_user_id is what price-review.php and admarc-prices.php read
+            // to establish WHO is acting. Only the gateway used to set it, so a
+            // session created here could open the dashboard but was rejected by
+            // both of those pages — approvals worked, price review did not.
+            $_SESSION['admin_user_id']  = $adminRow['id'];
+            $_SESSION['admin_username'] = $adminRow['username'];
+            $_SESSION['admin_login_at'] = time();
+            $_SESSION['admin_login_ip'] = $clientIp;
         } else {
             admin_record_attempt($db, $clientIp, $submittedUser, false);
             showLogin('Invalid credentials.');
@@ -534,12 +574,23 @@ function admin_promote_applicant(mysqli $db, array $app): string
 // ─── HANDLE APPROVE / DENY ────────────────────────────────────────────────────
 $actionMsg = '';
 $actionErr = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && !csrf_valid()) {
+    // A stale token used to fall through this handler in silence: the page
+    // re-rendered with no message, so the reviewer saw the applicant still
+    // sitting in the pending list and no reason why. An approval that did not
+    // happen must say so.
+    $actionErr = 'That request expired. Reload the page and try again, then re-check'
+               . ' the application — nothing was saved.';
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_valid()) {
     $id     = (int)$_POST['review_id'];
     $action = $_POST['review_action'] ?? '';
     $notes  = trim($_POST['review_notes'] ?? '');
 
-    if (in_array($action, ['approve', 'deny']) && $id > 0) {
+    if (!in_array($action, ['approve', 'deny'], true) || $id <= 0) {
+        $actionErr = 'That review request was not understood — nothing was saved.';
+    }
+    if (in_array($action, ['approve', 'deny'], true) && $id > 0) {
         $status = $action === 'approve' ? 'approved' : 'denied';
         $denial = $action === 'deny' ? $notes : null;
         $aNote  = $action === 'approve' ? $notes : null;
@@ -636,8 +687,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
             // Roll back defensively — if the connection itself is what failed, the
             // rollback can throw too, and that must not mask the real reason.
             try { $db->rollback(); } catch (Throwable $ignored) { /* connection already gone */ }
-            $actionErr = "Application #{$id} was NOT {$status} — the change was rolled back: "
-                       . $e->getMessage() . '. Nothing was saved and no email was sent.';
+            // The detail is logged, not shown. Under PHP 8 mysqli raises
+            // mysqli_sql_exception, so getMessage() here can be a driver string
+            // carrying the query and column names.
+            error_log('Application review failed for #' . $id . ': ' . $e->getMessage());
+            $actionErr = "Application #{$id} was NOT {$status} — the change was rolled back."
+                       . ' Nothing was saved and no email was sent.';
         } finally {
             // begin_transaction() only restores autocommit implicitly; put the
             // connection back into a known state for the handlers that follow.
@@ -680,20 +735,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_id']) && csrf_
 }
 
 // ─── HANDLE COMMUNITY PRICE REVIEW (approve / reject) ─────────────────────────
+/**
+ * Name to record in crowdsourced_prices.reviewed_by.
+ *
+ * Resolved from the authenticated session's admin id, never from the request.
+ * This used to be the literal string 'admin', which meant the audit trail could
+ * not say WHO approved a price — and production already carries a row stamped
+ * that way. assets/js/sortable-table.js tried to fix it from the browser by
+ * intercepting the form and posting to price-review.php instead, but a
+ * client-side intercept is not a control: if the script does not run, the plain
+ * form submit lands here, which is exactly how that row was written.
+ *
+ * Falls back to 'admin' only when the session predates the identity-aware
+ * gateway, so an older session degrades to the previous behaviour rather than
+ * being unable to review at all.
+ */
+function admin_reviewer_name(mysqli $db): string {
+    $id = (int)($_SESSION['admin_user_id'] ?? 0);
+    if ($id <= 0) {
+        return is_string($_SESSION['admin_username'] ?? null) && $_SESSION['admin_username'] !== ''
+            ? $_SESSION['admin_username'] : 'admin';
+    }
+    $name = '';
+    if ($stmt = $db->prepare("SELECT username FROM admin_users WHERE id = ? LIMIT 1")) {
+        $stmt->bind_param('i', $id);
+        if ($stmt->execute()) {
+            $stmt->bind_result($name);
+            $stmt->fetch();
+        }
+        $stmt->close();
+    }
+    return $name !== '' ? $name : 'admin';
+}
+
 $priceMsg = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['price_review_id']) && csrf_valid()) {
-    $pid   = (int)$_POST['price_review_id'];
-    $pact  = $_POST['price_action'] ?? '';
-    $pnote = trim($_POST['price_notes'] ?? '');
-    $pmap  = ['approve' => 'approved', 'reject' => 'rejected'];
-    if (isset($pmap[$pact]) && $pid > 0) {
-        $pstatus = $pmap[$pact];
-        $pn = $pact === 'reject' ? ($pnote !== '' ? $pnote : null) : null;
-        $ps = $db->prepare("UPDATE crowdsourced_prices SET status=?, flag_reason=?, reviewed_by='admin', reviewed_at=NOW() WHERE id=?");
-        if ($ps) {
-            $ps->bind_param('ssi', $pstatus, $pn, $pid);
-            $ps->execute();
-            $priceMsg = "Price report #{$pid} {$pstatus}.";
+$priceErr = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['price_review_id'])) {
+    if (!csrf_valid()) {
+        // Silence here meant the page re-rendered as if nothing had been clicked.
+        $priceErr = 'That request expired. Reload the page and try again.';
+    } else {
+        $pid   = (int)$_POST['price_review_id'];
+        $pact  = $_POST['price_action'] ?? '';
+        $pnote = trim($_POST['price_notes'] ?? '');
+        $pmap  = ['approve' => 'approved', 'reject' => 'rejected'];
+
+        if (!isset($pmap[$pact]) || $pid <= 0) {
+            $priceErr = 'That price review request was not understood.';
+        } else {
+            $pstatus = $pmap[$pact];
+            $pn = $pact === 'reject' ? ($pnote !== '' ? $pnote : null) : null;
+            $reviewer = admin_reviewer_name($db);
+
+            // Same shape as the approve/deny handler above and as
+            // admin/price-review.php: lock the row, confirm it is still
+            // reviewable, write, and verify the write landed.
+            try {
+                $db->begin_transaction();
+
+                // Only a report still awaiting a decision may be reviewed.
+                // Without this an already-approved report could be re-reviewed,
+                // which rewrites reviewed_by/reviewed_at and fires
+                // trg_price_audit_after_update again, adding a second audit row
+                // for a decision nobody made twice.
+                $lock = $db->prepare(
+                    "SELECT status FROM crowdsourced_prices
+                     WHERE id = ? AND status IN ('pending','flagged') FOR UPDATE"
+                );
+                if (!$lock) throw new RuntimeException('the price lookup could not be prepared');
+                $lock->bind_param('i', $pid);
+                if (!$lock->execute()) throw new RuntimeException('the price lookup failed');
+                $lock->bind_result($lockedStatus);
+                $found = $lock->fetch();
+                $lock->close();
+                if (!$found) {
+                    throw new RuntimeException('that price report is missing or has already been reviewed');
+                }
+
+                $ps = $db->prepare(
+                    "UPDATE crowdsourced_prices
+                     SET status = ?, flag_reason = ?, reviewed_by = ?, reviewed_at = NOW()
+                     WHERE id = ?"
+                );
+                if (!$ps) throw new RuntimeException('the price review could not be prepared');
+                $ps->bind_param('sssi', $pstatus, $pn, $reviewer, $pid);
+                $pOk = $ps->execute();
+                $pRows = $ps->affected_rows;
+                $ps->close();
+                // execute() used to be fired and discarded, so a failed or
+                // no-op write still reported success to the reviewer.
+                if (!$pOk || $pRows !== 1) {
+                    throw new RuntimeException('the price review did not save');
+                }
+
+                $db->commit();
+                $priceMsg = "Price report #{$pid} {$pstatus} by {$reviewer}.";
+            } catch (Throwable $e) {
+                try { $db->rollback(); } catch (Throwable $ignored) {}
+                error_log('Price review failed for #' . $pid . ': ' . $e->getMessage());
+                $priceErr = "Price report #{$pid} was NOT {$pstatus} — nothing was saved.";
+            } finally {
+                $db->autocommit(true);
+            }
         }
     }
 }
@@ -1030,6 +1173,9 @@ tr:hover td { background: #f0ece4; transition: background 0.15s ease; }
     </h2>
     <?php if ($priceMsg): ?>
     <div class="msg">✅ <?= htmlspecialchars($priceMsg) ?></div>
+    <?php endif; ?>
+    <?php if ($priceErr): ?>
+    <div class="msg" style="background:rgba(185,64,64,.08);border-color:rgba(185,64,64,.3);color:#b94040">⚠️ <?= htmlspecialchars($priceErr) ?></div>
     <?php endif; ?>
 
     <?php if (!$priceReviewAvailable): ?>
