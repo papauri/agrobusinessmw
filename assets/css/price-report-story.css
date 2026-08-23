@@ -1,11 +1,9 @@
 /* Agricultural price-report journey: paper + pencil field-notebook language. */
 .price-report-story {
     position: relative;
-    display: grid;
-    grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.3fr);
-    gap: 1.25rem;
+    display: block;
     margin: 0 0 1.25rem;
-    padding: 1.25rem;
+    padding: .35rem;
     background:
         linear-gradient(rgba(82,72,59,.025) 1px, transparent 1px),
         #f5f0e5;
@@ -160,17 +158,64 @@
     border-radius: 2px;
 }
 .price-story-dismiss:hover { background: rgba(255,255,255,.35); }
-.price-report-story.is-collapsed { opacity: 0; transform: translateY(-8px); max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0; }
+/* ── Disclosure ─────────────────────────────────────────────────────────────
+   Closed is the DEFAULT. Expanded, this panel is ~1800px tall and pushed the
+   first field of the report form nearly 3000px down the page, which made
+   "Report a Price" a scrolling exercise before it was a form. */
+.price-story-toggle {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    width: 100%;
+    min-height: 44px;              /* project floor for touch targets */
+    padding: .7rem .9rem;
+    background: transparent;
+    border: 0;
+    border-radius: 2px;
+    cursor: pointer;
+    font: inherit;
+    font-size: .92rem;
+    font-weight: 600;
+    color: #544b3f;
+    text-align: left;
+}
+.price-story-toggle:hover { background: rgba(255,255,255,.4); }
+.price-story-toggle:focus-visible { outline: 2px solid #8B7355; outline-offset: -2px; }
+.price-story-toggle-label { flex: 1 1 auto; }
+.price-story-icon { font-size: 1.15rem; opacity: .65; flex: 0 0 auto; }
+.price-story-chevron {
+    flex: 0 0 auto;
+    font-size: 1.3rem;
+    opacity: .6;
+    transition: transform .22s ease;
+}
+.price-report-story[data-open="true"] .price-story-chevron { transform: rotate(180deg); }
+
+/* The body carries the two-column art/copy layout the section used to own. */
+.price-story-body {
+    display: grid;
+    grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.3fr);
+    gap: 1.25rem;
+    padding: .35rem .9rem 1.1rem;
+}
+.price-story-body[hidden] { display: none; }
+
+/* Collapsed, the decorative dashed border and corner rings would frame an empty
+   strip, so they only appear once there is a panel to frame. */
+.price-report-story[data-open="false"]::before,
+.price-report-story[data-open="false"]::after { opacity: 0; }
 
 @media (max-width: 760px) {
-    .price-report-story { grid-template-columns: 1fr; gap: .35rem; padding: 1rem; }
+    .price-story-body { grid-template-columns: 1fr; gap: .35rem; padding: .35rem .8rem 1rem; }
     .price-story-art { min-height: 125px; max-height: 145px; }
     .price-story-sketch { width: min(76%, 260px); }
 }
 @media (max-width: 480px) {
     .price-story-path { grid-template-columns: 1fr; }
     .price-story-art { display: none; }
+    .price-story-toggle { font-size: .86rem; padding: .7rem .75rem; }
 }
 @media (prefers-reduced-motion: reduce) {
     .price-report-story { transition: none; }
+    .price-story-chevron { transition: none; }
 }

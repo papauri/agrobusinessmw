@@ -2828,6 +2828,14 @@ class AgroBusinessRevolution {
                         msg.style.background = 'rgba(22,163,74,.12)'; msg.style.color = '#166d42';
                         msg.textContent = res.message;
                         e.target.reset();
+                        // The refresh below rebuilds #content-area, which destroys
+                        // this very element and drops the reporter back on the All
+                        // Prices tab. They saw their confirmation for 1.5s and were
+                        // then returned to the table with no evidence anything had
+                        // been saved — the obvious response to which is to submit
+                        // the same price again. Stash the notice so the re-render
+                        // can put them back where they were, with it still on screen.
+                        this._priceReportNotice = res.message;
                         setTimeout(() => this.loadCropPrices(), 1500);
                     } else {
                         msg.style.background = 'rgba(220,38,38,.12)'; msg.style.color = '#991b1b';
@@ -2837,6 +2845,22 @@ class AgroBusinessRevolution {
                     msg.style.display = 'block'; msg.style.color = '#991b1b'; msg.textContent = 'Network error.';
                 } finally { btn.disabled = false; btn.textContent = 'Submit Price Report'; }
             });
+
+            // Re-entering the report tab after a successful submission: the
+            // reporter stays where they were and keeps their confirmation.
+            if (this._priceReportNotice) {
+                const notice = this._priceReportNotice;
+                this._priceReportNotice = null;
+                this._priceTab('report');
+                const prMsg = document.getElementById('pr-msg');
+                if (prMsg) {
+                    prMsg.style.display = 'block';
+                    prMsg.style.background = 'rgba(22,163,74,.12)';
+                    prMsg.style.color = '#166d42';
+                    prMsg.textContent = notice;
+                    prMsg.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            }
 
             // Load the district's markets into the datalist when a district is chosen.
             const prDistrict = document.getElementById('pr-district');

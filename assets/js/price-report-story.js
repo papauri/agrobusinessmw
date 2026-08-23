@@ -1,5 +1,22 @@
+/**
+ * "How price reporting works" — the explainer above the price report form.
+ *
+ * This is OPTIONAL DETAIL, so it ships COLLAPSED. Expanded it runs ~1800px and
+ * pushed the first form field ~2900px down the pane: someone who tapped
+ * "Report a Price" to report a price had to scroll past the whole story to
+ * reach the crop selector. The short practical summary the form needs (.pr-note)
+ * is always visible; this is the long version for anyone who wants it.
+ *
+ * The dismiss button used to call remove() on the section. The MutationObserver
+ * below watches #content-area, saw that removal, found no [data-price-story],
+ * and re-injected the section immediately — so the panel could not be closed at
+ * all. Nothing is removed now: the toggle flips one attribute, and the choice is
+ * remembered in localStorage so it survives navigation and reloads.
+ */
 (function () {
     'use strict';
+
+    var STORAGE_KEY = 'agroPriceStoryOpen';
 
     var COPY = {
         en: {
@@ -14,8 +31,11 @@
             ],
             approval: 'Important: price reports are subject to approval. A report may be approved automatically when it passes the checks, or held for admin review. Pending, flagged and rejected reports do not count toward the displayed price.',
             promise: 'Report what you genuinely observed. One careful note can help another farmer make a better decision.',
-            close: 'I understand',
-            open: 'How price reporting works'
+            close: 'Hide this',
+            // Distinct from the .pr-note heading directly above this toggle, which is
+            // also "How price reporting works" — two identical headings stacked read
+            // as a repeat rather than as a thing you can open.
+            open: 'What happens to your report'
         },
         ci: {
             eyebrow: 'Musanatumize mtengo wanu',
@@ -29,13 +49,30 @@
             ],
             approval: 'Chofunika: malipoti a mitengo amayenera kuvomerezedwa. Lipoti lingavomerezedwe ndi makina likadutsa ma check, kapena liyimitsidwe kuti admin aliyang’ane. Pending, flagged ndi rejected siziphatikizidwa pa mtengo wowonetsedwa.',
             promise: 'Nenani mtengo umene munaona kwenikweni. Lipoti limodzi lolondola lingathandize mlimi wina kupanga chisankho chabwino.',
-            close: 'Ndazindikira',
-            open: 'Mmene malipoti a mitengo amagwirira ntchito'
+            close: 'Bisani izi',
+            open: 'Zimene zimachitika ndi lipoti lanu'
         }
     };
 
     function lang() {
         return document.documentElement.getAttribute('data-user-lang') === 'ci' ? 'ci' : 'en';
+    }
+
+    /** Collapsed unless the reader has explicitly opened it before. */
+    function isOpen() {
+        try { return window.localStorage.getItem(STORAGE_KEY) === '1'; }
+        catch (e) { return false; }
+    }
+
+    function rememberOpen(open) {
+        try { window.localStorage.setItem(STORAGE_KEY, open ? '1' : '0'); }
+        catch (e) { /* private mode — the session still works, it just won't persist */ }
+    }
+
+    function escapeText(value) {
+        var d = document.createElement('div');
+        d.textContent = String(value == null ? '' : value);
+        return d.innerHTML;
     }
 
     function sketch() {
@@ -53,20 +90,47 @@
 
     function storyMarkup() {
         var c = COPY[lang()];
-        return '<section class="price-report-story" data-price-story>' +
-            '<div class="price-story-art">' + sketch() + '</div>' +
-            '<div class="price-story-copy">' +
-                '<p class="price-story-eyebrow">' + c.eyebrow + '</p>' +
-                '<h2>' + c.title + '</h2>' +
-                '<p class="price-story-intro">' + c.intro + '</p>' +
-                '<div class="price-story-path">' + c.steps.map(function (step) {
-                    return '<article class="price-story-step"><span class="price-story-number">' + step[0] + '</span><div><h3>' + step[1] + '</h3><p>' + step[2] + '</p></div></article>';
-                }).join('') + '</div>' +
-                '<div class="price-story-approval"><span class="material-symbols-rounded" aria-hidden="true">verified</span><p>' + c.approval + '</p></div>' +
-                '<p class="price-story-promise">' + c.promise + '</p>' +
-                '<button type="button" class="price-story-dismiss">' + c.close + '</button>' +
+        var open = isOpen();
+        return '<section class="price-report-story" data-price-story data-open="' + (open ? 'true' : 'false') + '">' +
+            '<button type="button" class="price-story-toggle" aria-expanded="' + (open ? 'true' : 'false') + '" aria-controls="price-story-body">' +
+                '<span class="material-symbols-rounded price-story-icon" aria-hidden="true">info</span>' +
+                '<span class="price-story-toggle-label">' + escapeText(c.open) + '</span>' +
+                '<span class="material-symbols-rounded price-story-chevron" aria-hidden="true">expand_more</span>' +
+            '</button>' +
+            '<div class="price-story-body" id="price-story-body"' + (open ? '' : ' hidden') + '>' +
+                '<div class="price-story-art">' + sketch() + '</div>' +
+                '<div class="price-story-copy">' +
+                    '<p class="price-story-eyebrow">' + escapeText(c.eyebrow) + '</p>' +
+                    '<h2>' + escapeText(c.title) + '</h2>' +
+                    '<p class="price-story-intro">' + escapeText(c.intro) + '</p>' +
+                    '<div class="price-story-path">' + c.steps.map(function (step) {
+                        return '<article class="price-story-step"><span class="price-story-number">' + escapeText(step[0]) +
+                            '</span><div><h3>' + escapeText(step[1]) + '</h3><p>' + escapeText(step[2]) + '</p></div></article>';
+                    }).join('') + '</div>' +
+                    '<div class="price-story-approval"><span class="material-symbols-rounded" aria-hidden="true">verified</span><p>' + escapeText(c.approval) + '</p></div>' +
+                    '<p class="price-story-promise">' + escapeText(c.promise) + '</p>' +
+                    '<button type="button" class="price-story-dismiss">' + escapeText(c.close) + '</button>' +
+                '</div>' +
             '</div>' +
         '</section>';
+    }
+
+    function setOpen(section, open, remember) {
+        var body = section.querySelector('.price-story-body');
+        var toggle = section.querySelector('.price-story-toggle');
+        section.setAttribute('data-open', open ? 'true' : 'false');
+        if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (body) body.hidden = !open;
+        if (remember) rememberOpen(open);
+    }
+
+    // The observer is paused around our own DOM writes so injecting cannot
+    // retrigger inject() through the mutation it just caused.
+    var observer = null;
+    function withObserverPaused(fn) {
+        if (observer) observer.disconnect();
+        try { fn(); }
+        finally { if (observer) observeArea(); }
     }
 
     function inject() {
@@ -81,29 +145,62 @@
             if (!reportForm && (text.indexOf('price') !== -1 || text.indexOf('report') !== -1 || form.querySelector('input[type="number"]'))) reportForm = form;
         });
 
-        var story = document.createElement('div');
-        story.innerHTML = storyMarkup();
-        var node = story.firstElementChild;
-        if (reportForm) reportForm.parentNode.insertBefore(node, reportForm);
-        else area.insertBefore(node, area.firstChild);
+        withObserverPaused(function () {
+            var story = document.createElement('div');
+            story.innerHTML = storyMarkup();
+            var node = story.firstElementChild;
+            if (reportForm) reportForm.parentNode.insertBefore(node, reportForm);
+            else area.insertBefore(node, area.firstChild);
+        });
     }
 
     document.addEventListener('click', function (event) {
-        var button = event.target.closest('.price-story-dismiss');
-        if (!button) return;
-        var story = button.closest('[data-price-story]');
-        if (story) {
-            story.classList.add('is-collapsed');
-            setTimeout(function () { story.remove(); }, 280);
+        var toggle = event.target.closest && event.target.closest('.price-story-toggle');
+        if (toggle) {
+            var section = toggle.closest('[data-price-story]');
+            if (section) setOpen(section, section.getAttribute('data-open') !== 'true', true);
+            return;
         }
+        // "Hide this" collapses the panel rather than removing it. Removing it
+        // was what the observer kept undoing.
+        var dismiss = event.target.closest && event.target.closest('.price-story-dismiss');
+        if (!dismiss) return;
+        var owner = dismiss.closest('[data-price-story]');
+        if (!owner) return;
+        setOpen(owner, false, true);
+        var head = owner.querySelector('.price-story-toggle');
+        if (head && typeof head.focus === 'function') head.focus();   // keep keyboard focus in place
     });
 
+    function observeArea() {
+        var area = document.getElementById('content-area');
+        if (!area || !observer) return;
+        observer.observe(area, { childList: true, subtree: true });
+    }
+
+    // Re-render in the reader's language when they switch it, keeping whatever
+    // open/closed state they chose.
+    function bindLanguage() {
+        var apply = function () {
+            var existing = document.querySelector('[data-price-story]');
+            if (!existing) return;
+            withObserverPaused(function () {
+                var holder = document.createElement('div');
+                holder.innerHTML = storyMarkup();
+                existing.replaceWith(holder.firstElementChild);
+            });
+        };
+        if (window.AgroLang && typeof window.AgroLang.onChange === 'function') window.AgroLang.onChange(apply);
+        else document.addEventListener('agro:langchange', apply);
+    }
+
     function boot() {
-        inject();
         var area = document.getElementById('content-area');
         if (!area) return;
-        var observer = new MutationObserver(function () { inject(); });
-        observer.observe(area, { childList: true, subtree: true });
+        observer = new MutationObserver(function () { inject(); });
+        inject();
+        observeArea();
+        bindLanguage();
         setTimeout(inject, 250);
         setTimeout(inject, 900);
     }
