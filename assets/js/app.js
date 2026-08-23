@@ -66,7 +66,98 @@ class AgroBusinessRevolution {
                 legume: 'Legume',
                 vegetable: 'Vegetable',
                 root: 'Root Crop',
-                specialty: 'Specialty'
+                specialty: 'Specialty',
+
+                // ── Crop Prices view + price report form ────────────────────
+                // Everything the price page renders. Nothing in loadCropPrices()
+                // may be a bare English literal: the page re-renders in place on
+                // a language switch, so a hardcoded string would simply survive
+                // the switch and sit there in English.
+                pr_intro_a: 'Official ADMARC prices, the Global Benchmark rate and community market reports are shown side by side in one searchable table. Community prices carry a level badge —',
+                pr_intro_b: '— showing how they compare to the Global Benchmark (±15%).',
+                pr_tab_all: 'All Prices',
+                pr_tab_report: '+ Report a Price',
+                pr_search_ph: 'Search crop, district, market, price...',
+                pr_src_all: 'All sources',
+                pr_src_admarc: 'ADMARC Official only',
+                pr_src_benchmark: 'Global Benchmark only',
+                pr_src_community: 'Community only',
+                pr_all_crops: 'All crops',
+                pr_all_districts: 'All districts',
+                pr_th_crop: 'Crop',
+                pr_th_location: 'Location',
+                pr_th_admarc: 'ADMARC Official',
+                pr_th_benchmark: 'Global Benchmark',
+                pr_th_community: 'Community Range',
+                pr_th_unit: 'Unit',
+                pr_th_date: 'Date',
+                pr_sub_per_kg: '(per kg)',
+                pr_sub_range: '(per kg, min/avg/max)',
+                pr_per_kg: 'per kg',
+                pr_bag_label: '50kg bag:',
+                pr_no_data: 'No price data yet.',
+                pr_no_match: 'No prices match your filters.',
+                pr_footnote: 'ADMARC Official is the government floor price, entered by hand from ADMARC/Ministry notices — hover a figure for its source and effective date. A dash means no official price is on record; the site shows no guess in its place. The Global Benchmark is the internationally monitored market rate for each crop. Community prices are farmer/trader reports, shown only after review — the value is the median of approved reports, marked ✓ Confirmed once 3+ reports agree.',
+                pr_badge_low: 'Low',
+                pr_badge_fair: 'Fair',
+                pr_badge_high: 'High',
+                pr_badge_low_t: 'More than 15% below the Global Benchmark rate',
+                pr_badge_fair_t: 'Within 15% of the Global Benchmark rate',
+                pr_badge_high_t: 'More than 15% above the Global Benchmark rate',
+                pr_chip_confirmed: '✓ Confirmed',
+                pr_chip_early: 'Early',
+                pr_chip_confirmed_t: '3+ approved reports',
+                pr_chip_early_t: '1–2 approved reports',
+                pr_lbl_admarc: 'ADMARC Official',
+                pr_lbl_benchmark: 'Global Benchmark',
+                pr_lbl_community: 'Community',
+                pr_lbl_both: 'Global Benchmark + Community',
+                pr_type_official: 'Official price',
+                pr_type_reference: 'Retail reference',
+                pr_type_community: 'Farmer/trader report',
+                pr_type_both: 'Reference + farmer reports',
+                pr_markets_n: 'markets',
+                pr_report_one: 'report',
+                pr_report_many: 'reports',
+                pr_today: 'Today',
+                pr_yesterday: 'Yesterday',
+                pr_days_ago: 'd ago',
+                pr_admarc_none: 'No ADMARC price on record for this crop',
+                pr_admarc_eff: 'Official ADMARC price, effective',
+                pr_stats: 'Showing {n} price records: {a} ADMARC official, {b} global benchmark, {c} community.',
+                pr_stats_filtered: 'Showing {v} of {n} price records',
+                prf_note_title: 'How price reporting works',
+                prf_note_body: 'Report a price you have seen at a market. Enter the phone number you registered with — prices from approved members that match recent prices are published straight away, while unusual ones are checked by our team first. All fields are required so the price is useful to other farmers.',
+                prf_crop: 'Crop',
+                prf_crop_ph: 'Select crop...',
+                prf_district: 'District',
+                prf_district_ph: 'Select district...',
+                prf_market: 'Market / Location',
+                prf_market_ph: 'Select district first, then pick or type',
+                prf_market_hint: 'Choose an existing market or type a new one.',
+                prf_price: 'Price — enter per kg or per 50kg bag',
+                prf_price_kg_ph: 'Per kg (MWK)',
+                prf_price_bag_ph: 'Per 50kg bag (MWK)',
+                prf_or: 'or',
+                prf_price_hint: 'Fill in whichever you know — we work out the other automatically, counting a bag as 50kg.',
+                prf_phone: 'Your Phone (registered)',
+                prf_phone_ph: 'e.g. 0999 123 456',
+                prf_email: 'Email',
+                prf_email_ph: 'you@example.com',
+                prf_submit: 'Submit Price Report',
+                prf_submitting: 'Submitting...',
+                prf_err_crop: 'Please select a crop.',
+                prf_err_district: 'Please select your district.',
+                prf_err_market: 'Please enter the market / location.',
+                prf_err_price: 'Please enter a price per kg or per bag.',
+                prf_err_phone: 'Please enter a valid phone number.',
+                prf_err_email: 'Please enter a valid email address.',
+                prf_err_failed: 'Submission failed.',
+                prf_err_network: 'Network error.',
+                pr_load_failed: 'Could not load crop prices. Check your connection and try again.',
+                prf_ok_approved: 'Price confirmed and published. Thank you for helping fellow farmers!',
+                prf_ok_flagged: 'Thank you! Your price looks unusual, so our team will check it before it shows.',
+                prf_ok_pending: 'Thank you! Your price has been received and will appear once reviewed.'
             },
             ci: {
                 welcome: 'Takulandirani ku AgroBusiness',
@@ -114,7 +205,94 @@ class AgroBusinessRevolution {
                 legume: 'Nyemba',
                 vegetable: 'Ndiwo',
                 root: 'Mbeu ya Mizizi',
-                specialty: 'Mbeu Inanena'
+                specialty: 'Mbeu Inanena',
+
+                // ── Mitengo ya Mbeu + fomu yotumizira mtengo ────────────────
+                pr_intro_a: 'Mitengo ya ADMARC, mtengo wa Global Benchmark ndi malipoti a msika kuchokera kwa anthu zikuwonetsedwa limodzi mu tebulo limodzi losakira. Mitengo ya anthu ili ndi chizindikiro —',
+                pr_intro_b: '— chosonyeza mmene ikufananira ndi Global Benchmark (±15%).',
+                pr_tab_all: 'Mitengo Yonse',
+                pr_tab_report: '+ Tumizani Mtengo',
+                pr_search_ph: 'Sakani mbeu, boma, msika, mtengo...',
+                pr_src_all: 'Magwero onse',
+                pr_src_admarc: 'ADMARC yokha',
+                pr_src_benchmark: 'Global Benchmark yokha',
+                pr_src_community: 'Ya anthu yokha',
+                pr_all_crops: 'Mbeu zonse',
+                pr_all_districts: 'Maboma onse',
+                pr_th_crop: 'Mbeu',
+                pr_th_location: 'Malo',
+                pr_th_admarc: 'ADMARC',
+                pr_th_benchmark: 'Global Benchmark',
+                pr_th_community: 'Mitengo ya Anthu',
+                pr_th_unit: 'Muyeso',
+                pr_th_date: 'Tsiku',
+                pr_sub_per_kg: '(pa kg)',
+                pr_sub_range: '(pa kg, otsika/pakati/okwera)',
+                pr_per_kg: 'pa kg',
+                pr_bag_label: 'Thumba la 50kg:',
+                pr_no_data: 'Palibe mitengo pakadali pano.',
+                pr_no_match: 'Palibe mitengo yogwirizana ndi zomwe mwasankha.',
+                pr_footnote: 'ADMARC ndi mtengo wotsika kwambiri woikidwa ndi boma, wolembedwa pamanja kuchokera pa zilengezo za ADMARC kapena Unduna. Ikani chala pa mtengo kuti muone komwe unachokera ndi tsiku lake. Kadontho (—) kukutanthauza kuti palibe mtengo wa boma wolembedwa; sitiwonetsa mtengo woganizira. Global Benchmark ndi mtengo wa msika woyang\'aniridwa padziko lonse pa mbeu iliyonse. Mitengo ya anthu ndi malipoti a alimi ndi amalonda, yowonetsedwa itayang\'anidwa — mtengo wake ndi wapakati wa malipoti ovomerezeka, ndipo umalembedwa ✓ Otsimikizika malipoti atakwana atatu kapena kupitirira.',
+                pr_badge_low: 'Wotsika',
+                pr_badge_fair: 'Woyenera',
+                pr_badge_high: 'Wokwera',
+                pr_badge_low_t: 'Wotsika ndi 15% kuchokera pa Global Benchmark',
+                pr_badge_fair_t: 'Uli mkati mwa 15% ya Global Benchmark',
+                pr_badge_high_t: 'Wokwera ndi 15% kuposa Global Benchmark',
+                pr_chip_confirmed: '✓ Otsimikizika',
+                pr_chip_early: 'Woyamba',
+                pr_chip_confirmed_t: 'Malipoti ovomerezeka atatu kapena kupitirira',
+                pr_chip_early_t: 'Malipoti ovomerezeka amodzi kapena awiri',
+                pr_lbl_admarc: 'ADMARC',
+                pr_lbl_benchmark: 'Global Benchmark',
+                pr_lbl_community: 'Anthu',
+                pr_lbl_both: 'Global Benchmark + Anthu',
+                pr_type_official: 'Mtengo wa boma',
+                pr_type_reference: 'Mtengo wa msika',
+                pr_type_community: 'Lipoti la mlimi kapena wamalonda',
+                pr_type_both: 'Mtengo wa msika + malipoti a alimi',
+                pr_markets_n: 'misika',
+                pr_report_one: 'lipoti',
+                pr_report_many: 'malipoti',
+                pr_today: 'Lero',
+                pr_yesterday: 'Dzulo',
+                pr_days_ago: 'masiku apitawa',
+                pr_admarc_none: 'Palibe mtengo wa ADMARC wolembedwa pa mbeu iyi',
+                pr_admarc_eff: 'Mtengo wa ADMARC, wayamba kugwira ntchito',
+                pr_stats: 'Mitengo {n} ikuwonetsedwa: {a} ya ADMARC, {b} ya Global Benchmark, {c} ya anthu.',
+                pr_stats_filtered: 'Mitengo {v} mwa {n} ikuwonetsedwa',
+                prf_note_title: 'Mmene malipoti a mitengo amagwirira ntchito',
+                prf_note_body: 'Tumizani mtengo umene munaona kumsika. Lembani nambala ya foni imene munalembetsa nayo — mitengo yochokera kwa anthu ovomerezeka yogwirizana ndi mitengo yaposachedwa imawonetsedwa nthawi yomweyo, pomwe yachilendo imayang\'aniridwa ndi gulu lathu poyamba. Malo onse ndi ofunika kuti mtengowo uthandize alimi ena.',
+                prf_crop: 'Mbeu',
+                prf_crop_ph: 'Sankhani mbeu...',
+                prf_district: 'Boma',
+                prf_district_ph: 'Sankhani boma...',
+                prf_market: 'Msika / Malo',
+                prf_market_ph: 'Sankhani boma poyamba, kenako sankhani kapena lembani',
+                prf_market_hint: 'Sankhani msika umene ulipo kapena lembani watsopano.',
+                prf_price: 'Mtengo — lembani pa kg kapena pa thumba la 50kg',
+                prf_price_kg_ph: 'Pa kg (MWK)',
+                prf_price_bag_ph: 'Pa thumba la 50kg (MWK)',
+                prf_or: 'kapena',
+                prf_price_hint: 'Lembani umene mukudziwa — ife tiwerengera winayo, tikuwerengera thumba ngati 50kg.',
+                prf_phone: 'Foni Yanu (yolembetsa)',
+                prf_phone_ph: 'mwachitsanzo 0999 123 456',
+                prf_email: 'Imelo',
+                prf_email_ph: 'inu@chitsanzo.com',
+                prf_submit: 'Tumizani Lipoti la Mtengo',
+                prf_submitting: 'Ikutumiza...',
+                prf_err_crop: 'Chonde sankhani mbeu.',
+                prf_err_district: 'Chonde sankhani boma lanu.',
+                prf_err_market: 'Chonde lembani msika kapena malo.',
+                prf_err_price: 'Chonde lembani mtengo pa kg kapena pa thumba.',
+                prf_err_phone: 'Chonde lembani nambala ya foni yolondola.',
+                prf_err_email: 'Chonde lembani imelo yolondola.',
+                prf_err_failed: 'Kutumiza kwalephereka.',
+                prf_err_network: 'Vuto la intaneti.',
+                pr_load_failed: 'Mitengo ya mbeu sinatsegulidwe. Onani intaneti yanu ndipo yesaninso.',
+                prf_ok_approved: 'Mtengo watsimikizidwa ndipo waonetsedwa. Zikomo pothandiza alimi anzanu!',
+                prf_ok_flagged: 'Zikomo! Mtengo wanu ukuwoneka wachilendo, choncho gulu lathu liuyang\'ana usanawonetsedwe.',
+                prf_ok_pending: 'Zikomo! Mtengo wanu walandiridwa ndipo uwonetsedwa ukayang\'anidwa.'
             }
         };
 
@@ -802,6 +980,19 @@ class AgroBusinessRevolution {
             this._historyReplaying = true;
             this.loadFarmingGuide();
             this._historyReplaying = false;
+        }
+
+        // Crop prices is built entirely from template literals, so [data-text]
+        // cannot reach it — the whole view has to be rebuilt to change language.
+        // Which tab is open is part of what the reader is doing, so it is carried
+        // across rather than resetting them to the table mid-report.
+        if (contentArea && contentArea.dataset.view === 'crop_prices') {
+            const reportPane = document.getElementById('pane-report');
+            const wasReporting = !!reportPane && reportPane.style.display !== 'none';
+            this._historyReplaying = true;
+            Promise.resolve(this.loadCropPrices()).then(() => {
+                if (wasReporting) this._priceTab('report');
+            }).finally(() => { this._historyReplaying = false; });
         }
     }
 
@@ -2339,7 +2530,7 @@ class AgroBusinessRevolution {
             const response = await this.apiCall('api.php?action=dual_crop_prices');
 
             if (!response.success) {
-                this.showError(response.error || 'Failed to load crop prices');
+                this.showError(response.error || this.texts[this.currentLang].pr_load_failed);
                 return;
             }
 
@@ -2358,6 +2549,11 @@ class AgroBusinessRevolution {
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
             }[char]));
             const fmt = n => n ? 'MK ' + parseFloat(n).toLocaleString() : '—';
+            // Every user-facing string below comes from this table. A bare literal
+            // here would survive the in-place re-render on a language switch and
+            // sit in English on a Chichewa page.
+            const t = this.texts[this.currentLang];
+            const fill = (str, vars) => String(str).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
             const ago = dt => {
                 if (!dt) return '—';
                 // MySQL returns "2026-08-16 13:49:50". iOS Safari returns Invalid
@@ -2365,7 +2561,10 @@ class AgroBusinessRevolution {
                 const when = new Date(String(dt).replace(' ', 'T'));
                 if (Number.isNaN(when.getTime())) return '—';
                 const d = Math.floor((Date.now() - when.getTime()) / 86400000);
-                return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d}d ago`;
+                // Chichewa reads "masiku 3 apitawa", so the number is placed
+                // rather than glued to a suffix.
+                return d === 0 ? t.pr_today : d === 1 ? t.pr_yesterday
+                    : (this.currentLang === 'ci' ? `masiku ${d} apitawa` : `${d}${t.pr_days_ago}`);
             };
 
             // Combine FEWS and community reports into ONE row per crop + district,
@@ -2384,7 +2583,7 @@ class AgroBusinessRevolution {
                         _hasFews: false,
                         _hasCommunity: false,
                         source: 'community',
-                        sourceLabel: 'Community',
+                        sourceLabel: t.pr_lbl_community,
                         crop_id: cropId,
                         crop_name: cropName,
                         district: districtName || '—',
@@ -2405,7 +2604,7 @@ class AgroBusinessRevolution {
                         community_confirmed: false,
                         reports: '—',
                         unit: 'kg',
-                        type: 'Farmer/trader report'
+                        type: t.pr_type_community
                     };
                 }
                 return combinedMap[key];
@@ -2482,12 +2681,12 @@ class AgroBusinessRevolution {
                 if (rec._communityMarkets.size === 1) {
                     rec.market = [...rec._communityMarkets][0];
                 } else if (rec._communityMarkets.size > 1) {
-                    rec.market = `${rec._communityMarkets.size} markets`;
+                    rec.market = `${rec._communityMarkets.size} ${t.pr_markets_n}`;
                 } else if (rec.market === '—') {
                     rec.market = r.market_name || '—';
                 }
 
-                rec.reports = `${rec._communityReports} report${rec._communityReports === 1 ? '' : 's'} · ${ago(r.last_reported)}`;
+                rec.reports = `${rec._communityReports} ${rec._communityReports === 1 ? t.pr_report_one : t.pr_report_many} · ${ago(r.last_reported)}`;
                 rec._ts = Math.max(rec._ts, ts);
             });
 
@@ -2495,12 +2694,12 @@ class AgroBusinessRevolution {
             Object.values(combinedMap).forEach(rec => {
                 if (rec._hasFews && rec._hasCommunity) {
                     rec.source = 'both';
-                    rec.sourceLabel = 'Global Benchmark + Community';
-                    rec.type = 'Reference + farmer reports';
+                    rec.sourceLabel = t.pr_lbl_both;
+                    rec.type = t.pr_type_both;
                 } else if (rec._hasFews) {
                     rec.source = 'fews';
-                    rec.sourceLabel = 'Global Benchmark';
-                    rec.type = 'Retail reference';
+                    rec.sourceLabel = t.pr_lbl_benchmark;
+                    rec.type = t.pr_type_reference;
                 }
             });
 
@@ -2540,8 +2739,8 @@ class AgroBusinessRevolution {
                 // "Community only" filter. Label it for what it actually is.
                 if (!rec._hasFews && !rec._hasCommunity) {
                     rec.source = 'admarc';
-                    rec.sourceLabel = 'ADMARC Official';
-                    rec.type = 'Official price';
+                    rec.sourceLabel = t.pr_lbl_admarc;
+                    rec.type = t.pr_type_official;
                 }
             });
 
@@ -2562,21 +2761,21 @@ class AgroBusinessRevolution {
             // Appended inside a price badge so the number is never ambiguous: every
             // headline price in this table is per kilogram, with the bag equivalent
             // spelled out underneath.
-            const perKg = '<small class="price-unit">per kg</small>';
+            const perKg = `<small class="price-unit">${esc(t.pr_per_kg)}</small>`;
 
             const priceRows = rows.map((r, i) => {
                 const searchText = [r.sourceLabel, r.crop_name, r.district, r.market, r.type, r.fewsPrice || '', r.communityPrice || '', r.reports, r.unit, r.admarc_price_num ? 'admarc' : ''].join(' ').toLowerCase();
 
                 const fewsNum = r.fews_price_num ?? null;
-                const fewsPer50Display = fewsNum ? `${BAG_KG}kg bag: MK ${Math.round(fewsNum * BAG_KG).toLocaleString()}` : '';
+                const fewsPer50Display = fewsNum ? `${t.pr_bag_label} MK ${Math.round(fewsNum * BAG_KG).toLocaleString()}` : '';
                 const fewsDisplay = fewsNum ? fmt(fewsNum) : (r.fewsPrice || '—');
 
                 const admarcNum = r.admarc_price_num ?? null;
                 const admarcBag = r.admarc_bag_num ?? (admarcNum ? Math.round(admarcNum * BAG_KG) : null);
-                const admarcBagDisplay = admarcBag ? `${BAG_KG}kg bag: MK ${Math.round(admarcBag).toLocaleString()}` : '';
+                const admarcBagDisplay = admarcBag ? `${t.pr_bag_label} MK ${Math.round(admarcBag).toLocaleString()}` : '';
                 const admarcTitle = admarcNum
-                    ? `Official ADMARC price${r.admarc_effective ? ', effective ' + r.admarc_effective : ''}${r.admarc_source_note ? ' — ' + r.admarc_source_note : ''}`
-                    : 'No ADMARC price on record for this crop';
+                    ? `${t.pr_admarc_eff}${r.admarc_effective ? ' ' + r.admarc_effective : ''}${r.admarc_source_note ? ' — ' + r.admarc_source_note : ''}`
+                    : t.pr_admarc_none;
 
                 const communityMin = r.community_min_num ?? null;
                 const communityAvg = r.community_avg_num ?? null;
@@ -2588,26 +2787,26 @@ class AgroBusinessRevolution {
                 const communityDisplay = (communityMin || communityAvg || communityMax) ?
                     `${communityMin ? fmt(communityMin) : '—'} / ${communityAvg ? fmt(communityAvg) : '—'} / ${communityMax ? fmt(communityMax) : '—'}` : (r.communityPrice || '—');
                 const communityBagDisplay = (communityMinBag || communityAvgBag || communityMaxBag) ?
-                    `${BAG_KG}kg bag: ${communityMinBag ? 'MK ' + communityMinBag.toLocaleString() : '—'} / ${communityAvgBag ? 'MK ' + communityAvgBag.toLocaleString() : '—'} / ${communityMaxBag ? 'MK ' + communityMaxBag.toLocaleString() : '—'}` : '';
+                    `${t.pr_bag_label} ${communityMinBag ? 'MK ' + communityMinBag.toLocaleString() : '—'} / ${communityAvgBag ? 'MK ' + communityAvgBag.toLocaleString() : '—'} / ${communityMaxBag ? 'MK ' + communityMaxBag.toLocaleString() : '—'}` : '';
 
                 // Price level: community average vs the Global Benchmark rate (±15% band).
                 let priceLevelBadge = '';
                 if (communityAvg && fewsNum) {
                     const ratio = communityAvg / fewsNum;
                     if (ratio < 0.85) {
-                        priceLevelBadge = '<span class="price-level-badge low" title="More than 15% below the Global Benchmark rate">Low</span>';
+                        priceLevelBadge = `<span class="price-level-badge low" title="${esc(t.pr_badge_low_t)}">${esc(t.pr_badge_low)}</span>`;
                     } else if (ratio > 1.15) {
-                        priceLevelBadge = '<span class="price-level-badge high" title="More than 15% above the Global Benchmark rate">High</span>';
+                        priceLevelBadge = `<span class="price-level-badge high" title="${esc(t.pr_badge_high_t)}">${esc(t.pr_badge_high)}</span>`;
                     } else {
-                        priceLevelBadge = '<span class="price-level-badge fair" title="Within 15% of the Global Benchmark rate">Fair</span>';
+                        priceLevelBadge = `<span class="price-level-badge fair" title="${esc(t.pr_badge_fair_t)}">${esc(t.pr_badge_fair)}</span>`;
                     }
                 }
 
                 const hasCommunity = (communityMin || communityAvg || communityMax);
                 const confirmedChip = hasCommunity
                     ? (r.community_confirmed
-                        ? '<span class="price-confirm-chip confirmed" title="3+ approved reports">✓ Confirmed</span>'
-                        : '<span class="price-confirm-chip early" title="1–2 approved reports">Early</span>')
+                        ? `<span class="price-confirm-chip confirmed" title="${esc(t.pr_chip_confirmed_t)}">${esc(t.pr_chip_confirmed)}</span>`
+                        : `<span class="price-confirm-chip early" title="${esc(t.pr_chip_early_t)}">${esc(t.pr_chip_early)}</span>`)
                     : '';
 
                 return `
@@ -2624,7 +2823,7 @@ class AgroBusinessRevolution {
 
             // Load districts for the table filter
             const districtsList = await this.loadDistricts();
-            const districtOptions = ['<option value="all">All districts</option>'].concat(
+            const districtOptions = [`<option value="all">${esc(t.pr_all_districts)}</option>`].concat(
                 districtsList.map(d => `<option value="${esc((d.name || '').toLowerCase())}">${esc(d.name)}</option>`)
             ).join('');
             // District options for the price-report form (value = id, required select).
@@ -2632,91 +2831,94 @@ class AgroBusinessRevolution {
                 .map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
 
             const area = document.getElementById('content-area');
+            // Tagged so updateTexts() can re-render this view in place on a language
+            // switch, the same way the farming guide does.
+            area.dataset.view = 'crop_prices';
             area.innerHTML = `
-                <h2 style="font-family:'DM Serif Display',serif;margin-bottom:1rem;color:var(--text-primary)">Crop Prices</h2>
-                <p class="price-meta" style="margin-bottom:1.25rem">Official ADMARC prices, the Global Benchmark rate and community market reports are shown side by side in one searchable table. Community prices carry a level badge — <span class="price-level-badge low">Low</span> <span class="price-level-badge fair">Fair</span> <span class="price-level-badge high">High</span> — showing how they compare to the Global Benchmark (±15%).</p>
+                <h2 style="font-family:'DM Serif Display',serif;margin-bottom:1rem;color:var(--text-primary)">${esc(t.crop_prices)}</h2>
+                <p class="price-meta" style="margin-bottom:1.25rem">${esc(t.pr_intro_a)} <span class="price-level-badge low">${esc(t.pr_badge_low)}</span> <span class="price-level-badge fair">${esc(t.pr_badge_fair)}</span> <span class="price-level-badge high">${esc(t.pr_badge_high)}</span> ${esc(t.pr_intro_b)}</p>
 
                 <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap">
-                    <button class="price-tab active" id="tab-prices" onclick="app._priceTab('prices')">All Prices <span style="background:var(--accent);color:#fff;border-radius:20px;padding:.1rem .5rem;font-size:.75rem;margin-left:.3rem">${rows.length}</span></button>
-                    <button class="price-tab" id="tab-report" onclick="app._priceTab('report')" style="margin-left:auto;background:var(--primary);color:#fff;border-color:var(--primary)">+ Report a Price</button>
+                    <button class="price-tab active" id="tab-prices" onclick="app._priceTab('prices')">${esc(t.pr_tab_all)} <span style="background:var(--accent);color:#fff;border-radius:20px;padding:.1rem .5rem;font-size:.75rem;margin-left:.3rem">${rows.length}</span></button>
+                    <button class="price-tab" id="tab-report" onclick="app._priceTab('report')" style="margin-left:auto;background:var(--primary);color:#fff;border-color:var(--primary)">${esc(t.pr_tab_report)}</button>
                 </div>
 
                 <div id="pane-prices" class="price-pane">
                     <div class="price-filters">
-                        <input id="price-search" type="search" placeholder="Search crop, district, market, source, price..." style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
+                        <input id="price-search" type="search" placeholder="${esc(t.pr_search_ph)}" style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
                         <select id="price-source-filter" style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
-                            <option value="all">All sources</option>
-                            <option value="admarc">ADMARC Official only</option>
-                            <option value="fews">Global Benchmark only</option>
-                            <option value="community">Community only</option>
+                            <option value="all">${esc(t.pr_src_all)}</option>
+                            <option value="admarc">${esc(t.pr_src_admarc)}</option>
+                            <option value="fews">${esc(t.pr_src_benchmark)}</option>
+                            <option value="community">${esc(t.pr_src_community)}</option>
                         </select>
                         <select id="price-crop-filter" style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
-                            <option value="all">All crops</option>
+                            <option value="all">${esc(t.pr_all_crops)}</option>
                             ${cropFilterOptions}
                         </select>
                         <select id="price-district-filter" style="padding:.75rem;border:1px solid var(--border);border-radius:8px">
                             ${districtOptions}
                         </select>
                     </div>
-                    <p id="price-filter-stats" class="price-meta">Showing ${rows.length} price records: ${admarc.length} ADMARC official, ${fews.length} global benchmark, ${community.length} community.</p>
+                    <p id="price-filter-stats" class="price-meta">${esc(fill(t.pr_stats, { n: rows.length, a: admarc.length, b: fews.length, c: community.length }))}</p>
                     <div class="table-wrap" style="overflow-x:auto">
                     <table class="data-table sortable" id="price-combined-table">
                         <thead><tr>
-                            <th>Crop</th><th>Location</th><th>ADMARC Official <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>Global Benchmark <small style="font-weight:400;color:var(--text-muted)">(per kg)</small></th><th>Community Range <small style="font-weight:400;color:var(--text-muted)">(per kg, min/avg/max)</small></th><th>Unit</th><th>Date</th>
+                            <th>${esc(t.pr_th_crop)}</th><th>${esc(t.pr_th_location)}</th><th>${esc(t.pr_th_admarc)} <small style="font-weight:400;color:var(--text-muted)">${esc(t.pr_sub_per_kg)}</small></th><th>${esc(t.pr_th_benchmark)} <small style="font-weight:400;color:var(--text-muted)">${esc(t.pr_sub_per_kg)}</small></th><th>${esc(t.pr_th_community)} <small style="font-weight:400;color:var(--text-muted)">${esc(t.pr_sub_range)}</small></th><th>${esc(t.pr_th_unit)}</th><th>${esc(t.pr_th_date)}</th>
                         </tr></thead>
                         <tbody>
-                            ${priceRows || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">No price data yet.</td></tr>`}
-                            <tr id="price-no-results" style="display:none"><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">No prices match your filters.</td></tr>
+                            ${priceRows || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">${esc(t.pr_no_data)}</td></tr>`}
+                            <tr id="price-no-results" style="display:none"><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem">${esc(t.pr_no_match)}</td></tr>
                         </tbody>
                     </table>
                     </div>
-                    <p class="price-meta" style="margin-top:1rem">ADMARC Official is the government floor price, entered by hand from ADMARC/Ministry notices — hover a figure for its source and effective date. A dash means no official price is on record; the site shows no guess in its place. The Global Benchmark is the internationally monitored market rate for each crop, tracked by a global price-monitoring network and refreshed from source. Community prices are farmer/trader reports, shown only after review — the value is the median of approved reports, marked <strong>✓ Confirmed</strong> once 3+ reports agree.</p>
+                    <p class="price-meta" style="margin-top:1rem">${esc(t.pr_footnote)}</p>
                 </div>
 
                 <div id="pane-report" class="price-pane" style="display:none">
                     <div class="pr-note">
-                        <strong>How price reporting works</strong>
-                        <p>Report a price you have seen at a market. Enter the phone number you registered with — prices from approved members that match recent prices are published straight away, while unusual ones are checked by our team first. All fields are required so the price is useful to other farmers.</p>
+                        <strong>${esc(t.prf_note_title)}</strong>
+                        <p>${esc(t.prf_note_body)}</p>
                     </div>
                     <form id="price-report-form" class="pr-form">
                         <div class="form-group">
-                            <label>Crop *</label>
+                            <label>${esc(t.prf_crop)} *</label>
                             <select id="pr-crop" required>
-                                <option value="">Select crop...</option>
+                                <option value="">${esc(t.prf_crop_ph)}</option>
                                 ${cropOptions}
                             </select>
                         </div>
                         <div class="form-group">
-                            <label>District *</label>
+                            <label>${esc(t.prf_district)} *</label>
                             <select id="pr-district" required>
-                                <option value="">Select district...</option>
+                                <option value="">${esc(t.prf_district_ph)}</option>
                                 ${districtReportOptions}
                             </select>
                         </div>
                         <div class="form-group">
-                            <label>Market / Location *</label>
-                            <input type="text" id="pr-market" list="pr-market-list" placeholder="Select district first, then pick or type" autocomplete="off" required>
+                            <label>${esc(t.prf_market)} *</label>
+                            <input type="text" id="pr-market" list="pr-market-list" placeholder="${esc(t.prf_market_ph)}" autocomplete="off" required>
                             <datalist id="pr-market-list"></datalist>
-                            <small class="pr-hint">Choose an existing market or type a new one.</small>
+                            <small class="pr-hint">${esc(t.prf_market_hint)}</small>
                         </div>
                         <div class="form-group">
-                            <label>Price — enter per kg <em>or</em> per 50kg bag *</label>
+                            <label>${esc(t.prf_price)} *</label>
                             <div class="pr-price-row">
-                                <input type="number" id="pr-price-kg" min="1" max="99999" step="1" placeholder="Per kg (MWK)">
-                                <span class="pr-price-or">or</span>
-                                <input type="number" id="pr-price-bag" min="1" max="9999999" step="1" placeholder="Per 50kg bag (MWK)">
+                                <input type="number" id="pr-price-kg" min="1" max="99999" step="1" placeholder="${esc(t.prf_price_kg_ph)}">
+                                <span class="pr-price-or">${esc(t.prf_or)}</span>
+                                <input type="number" id="pr-price-bag" min="1" max="9999999" step="1" placeholder="${esc(t.prf_price_bag_ph)}">
                             </div>
-                            <small class="pr-hint">Fill in whichever you know — we work out the other automatically, counting a bag as 50kg.</small>
+                            <small class="pr-hint">${esc(t.prf_price_hint)}</small>
                         </div>
                         <div class="form-group">
-                            <label>Your Phone (registered) *</label>
-                            <input type="tel" id="pr-phone" placeholder="e.g. 0999 123 456" required>
+                            <label>${esc(t.prf_phone)} *</label>
+                            <input type="tel" id="pr-phone" placeholder="${esc(t.prf_phone_ph)}" required>
                         </div>
                         <div class="form-group">
-                            <label>Email *</label>
-                            <input type="email" id="pr-email" placeholder="you@example.com" required>
+                            <label>${esc(t.prf_email)} *</label>
+                            <input type="email" id="pr-email" placeholder="${esc(t.prf_email_ph)}" required>
                         </div>
-                        <button type="submit" class="btn-primary">Submit Price Report</button>
+                        <button type="submit" class="btn-primary">${esc(t.prf_submit)}</button>
                         <p id="pr-msg" style="display:none;padding:.75rem 1rem;border-radius:8px;font-weight:600"></p>
                     </form>
                 </div>
@@ -2741,7 +2943,7 @@ class AgroBusinessRevolution {
                     if (show) visible++;
                 });
                 document.getElementById('price-no-results').style.display = visible ? 'none' : '';
-                document.getElementById('price-filter-stats').textContent = `Showing ${visible} of ${rows.length} price records`;
+                document.getElementById('price-filter-stats').textContent = fill(t.pr_stats_filtered, { v: visible, n: rows.length });
             };
             ['price-search', 'price-source-filter', 'price-crop-filter', 'price-district-filter'].forEach(id => {
                 const el = document.getElementById(id);
@@ -2801,14 +3003,14 @@ class AgroBusinessRevolution {
                 const email     = document.getElementById('pr-email').value.trim();
 
                 // All fields required; price may be given per kg OR per bag.
-                if (!cropId) return showErr('Please select a crop.');
-                if (!districtId) return showErr('Please select your district.');
-                if (!market) return showErr('Please enter the market / location.');
-                if ((!priceKg || priceKg <= 0) && (!priceBag || priceBag <= 0)) return showErr('Please enter a price per kg or per bag.');
-                if (!/^\+?[0-9\s\-]{8,20}$/.test(phone)) return showErr('Please enter a valid phone number.');
-                if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return showErr('Please enter a valid email address.');
+                if (!cropId) return showErr(t.prf_err_crop);
+                if (!districtId) return showErr(t.prf_err_district);
+                if (!market) return showErr(t.prf_err_market);
+                if ((!priceKg || priceKg <= 0) && (!priceBag || priceBag <= 0)) return showErr(t.prf_err_price);
+                if (!/^\+?[0-9\s\-]{8,20}$/.test(phone)) return showErr(t.prf_err_phone);
+                if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return showErr(t.prf_err_email);
 
-                btn.disabled = true; btn.textContent = 'Submitting...';
+                btn.disabled = true; btn.textContent = t.prf_submitting;
                 try {
                     const res = await this.apiCall('api.php?action=submit_price', {
                         method: 'POST',
@@ -2826,7 +3028,12 @@ class AgroBusinessRevolution {
                     msg.style.display = 'block';
                     if (res.success) {
                         msg.style.background = 'rgba(22,163,74,.12)'; msg.style.color = '#166d42';
-                        msg.textContent = res.message;
+                        // api.php returns `status` ('approved' | 'flagged' | 'pending')
+                        // alongside an English `message`. Render from the stable code
+                        // so the confirmation matches the page the reporter is
+                        // reading; `message` stays the fallback for an unknown status.
+                        const okKey = { approved: t.prf_ok_approved, flagged: t.prf_ok_flagged, pending: t.prf_ok_pending }[res.status];
+                        msg.textContent = okKey || res.message;
                         e.target.reset();
                         // The refresh below rebuilds #content-area, which destroys
                         // this very element and drops the reporter back on the All
@@ -2835,15 +3042,15 @@ class AgroBusinessRevolution {
                         // been saved — the obvious response to which is to submit
                         // the same price again. Stash the notice so the re-render
                         // can put them back where they were, with it still on screen.
-                        this._priceReportNotice = res.message;
+                        this._priceReportNotice = msg.textContent;
                         setTimeout(() => this.loadCropPrices(), 1500);
                     } else {
                         msg.style.background = 'rgba(220,38,38,.12)'; msg.style.color = '#991b1b';
-                        msg.textContent = res.error || 'Submission failed.';
+                        msg.textContent = res.error || t.prf_err_failed;
                     }
                 } catch (err) {
-                    msg.style.display = 'block'; msg.style.color = '#991b1b'; msg.textContent = 'Network error.';
-                } finally { btn.disabled = false; btn.textContent = 'Submit Price Report'; }
+                    msg.style.display = 'block'; msg.style.color = '#991b1b'; msg.textContent = t.prf_err_network;
+                } finally { btn.disabled = false; btn.textContent = t.prf_submit; }
             });
 
             // Re-entering the report tab after a successful submission: the
@@ -2890,7 +3097,7 @@ class AgroBusinessRevolution {
 
         } catch (error) {
             console.error('Error loading crop prices:', error);
-            this.showError('Failed to load crop prices');
+            this.showError(this.texts[this.currentLang].pr_load_failed);
         }
     }
 

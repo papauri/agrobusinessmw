@@ -91,7 +91,7 @@ Six translation tables, all with complete key parity:
 
 | Table | Covers |
 |---|---|
-| `app.js` `this.texts` | dashboard and the shared views |
+| `app.js` `this.texts` | dashboard, the shared views, and the whole Crop Prices page including the price-report form |
 | `assets/js/register.js` `copy` | the registration page |
 | `assets/js/directory-navigation.js` `copy` | Sellers / Buyers / Farmers |
 | `assets/js/market-insights-page.js` `copy` | Market Insights |
@@ -99,7 +99,12 @@ Six translation tables, all with complete key parity:
 | `ussd/menus.php` `$menu_texts` | every USSD page |
 
 Rules:
-- **Never hardcode a user-facing string** in a controller. Add a key to that
+- **Never hardcode a user-facing string** in a controller. Views built from
+  template literals — `loadCropPrices()` is the big one — cannot be reached by
+  `[data-text]`, so a literal there survives the language switch untouched and
+  sits in English on a Chichewa page. Those views set
+  `content-area.dataset.view` and are rebuilt by `updateTexts()`; add a key to
+  the table instead. Add a key to that
   file's table, in **both** `en` and `ci` — nothing checks this automatically
   any more, so a missing key now ships silently.
 - `config/registration.php` cannot read localStorage, so the web client sends
